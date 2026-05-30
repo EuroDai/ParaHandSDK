@@ -118,8 +118,10 @@ class FlowLayout(QLayout):
 
 class JointRowWidget(QGroupBox):
     targetChanged = Signal(str, float)
-    jogStarted = Signal(str, int)
-    jogStopped = Signal(str)
+    stepAdjustStarted = Signal(str, int)
+    stepAdjustStopped = Signal(str)
+    zeroJogStarted = Signal(str, int)
+    zeroJogStopped = Signal(str)
     activeToggled = Signal(str, bool)
     configSaveRequested = Signal(str, object)
 
@@ -143,6 +145,7 @@ class JointRowWidget(QGroupBox):
         self._connected = False
         self._control_mode = self.MOTOR_MODE
         self._jog_enabled = True
+        self._zero_jog_visible = False
         self._display_initialized = False
         self._display_min = 0.0
         self._display_max = 0.0
@@ -152,6 +155,10 @@ class JointRowWidget(QGroupBox):
 
         self.minus_button = QPushButton("-")
         self.plus_button = QPushButton("+")
+        self.zero_minus_button = QPushButton("-")
+        self.zero_plus_button = QPushButton("+")
+        self.zero_label = QLabel("调零")
+        self.zero_controls_widget = QWidget()
         self.slider = QSlider(Qt.Horizontal)
         self.spinbox = QDoubleSpinBox()
         self.actual_label = QLabel("实际位置: --")
@@ -185,6 +192,8 @@ class JointRowWidget(QGroupBox):
     def _build_ui(self):
         self.minus_button.setFixedWidth(32)
         self.plus_button.setFixedWidth(32)
+        self.zero_minus_button.setFixedWidth(32)
+        self.zero_plus_button.setFixedWidth(32)
 
         self.slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
@@ -238,6 +247,14 @@ class JointRowWidget(QGroupBox):
         summary_layout.addStretch()
         summary_layout.addWidget(self.config_toggle_button)
 
+        zero_layout = QHBoxLayout()
+        zero_layout.setContentsMargins(0, 0, 0, 0)
+        zero_layout.addWidget(self.zero_label)
+        zero_layout.addWidget(self.zero_minus_button)
+        zero_layout.addWidget(self.zero_plus_button)
+        zero_layout.addStretch()
+        self.zero_controls_widget.setLayout(zero_layout)
+
         config_layout = QHBoxLayout()
         config_layout.setContentsMargins(0, 0, 0, 0)
         config_layout.addWidget(QLabel("电机ID"))
@@ -267,6 +284,7 @@ class JointRowWidget(QGroupBox):
         layout.addLayout(summary_layout)
         layout.addWidget(self.motor_actual_angle_label)
         layout.addWidget(self.feedback_label)
+        layout.addWidget(self.zero_controls_widget)
         layout.addWidget(self.config_container)
         self.setLayout(layout)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -275,10 +293,14 @@ class JointRowWidget(QGroupBox):
         self.slider.valueChanged.connect(self._on_slider_changed)
         self.slider.sliderReleased.connect(self._on_slider_released)
         self.spinbox.editingFinished.connect(self._on_spinbox_committed)
-        self.minus_button.pressed.connect(lambda: self.jogStarted.emit(self.joint_name, 2))
-        self.minus_button.released.connect(lambda: self.jogStopped.emit(self.joint_name))
-        self.plus_button.pressed.connect(lambda: self.jogStarted.emit(self.joint_name, 1))
-        self.plus_button.released.connect(lambda: self.jogStopped.emit(self.joint_name))
+        self.minus_button.pressed.connect(lambda: self.stepAdjustStarted.emit(self.joint_name, -1))
+        self.minus_button.released.connect(lambda: self.stepAdjustStopped.emit(self.joint_name))
+        self.plus_button.pressed.connect(lambda: self.stepAdjustStarted.emit(self.joint_name, 1))
+        self.plus_button.released.connect(lambda: self.stepAdjustStopped.emit(self.joint_name))
+        self.zero_minus_button.pressed.connect(lambda: self.zeroJogStarted.emit(self.joint_name, 2))
+        self.zero_minus_button.released.connect(lambda: self.zeroJogStopped.emit(self.joint_name))
+        self.zero_plus_button.pressed.connect(lambda: self.zeroJogStarted.emit(self.joint_name, 1))
+        self.zero_plus_button.released.connect(lambda: self.zeroJogStopped.emit(self.joint_name))
 
         self.motor_id_spinbox.valueChanged.connect(self._mark_config_dirty)
         self.min_spinbox.valueChanged.connect(self._mark_config_dirty)
@@ -358,8 +380,9 @@ class JointRowWidget(QGroupBox):
         unit_suffix: str,
         *,
         decimals: int = 2,
-        step: float = 0.5,
-        jog_enabled: bool = True,
+        step: float = 1.0,
+        main_adjust_enabled: bool = True,
+        zero_jog_visible: bool = False,
     ):
         current_value = self.spinbox.value() if self._target_initialized else float(display_min)
         self._syncing = True
@@ -369,12 +392,14 @@ class JointRowWidget(QGroupBox):
         self._display_unit_suffix = unit_suffix
         self._display_decimals = int(decimals)
         self._display_step = float(step)
-        self._jog_enabled = jog_enabled
+        self._jog_enabled = main_adjust_enabled
+        self._zero_jog_visible = bool(zero_jog_visible)
         self.spinbox.setDecimals(self._display_decimals)
         self.spinbox.setSingleStep(self._display_step)
         self.spinbox.setSuffix(self._display_unit_suffix)
         self.spinbox.setRange(self._display_min, self._display_max)
         self.slider.setRange(self._value_to_slider(self._display_min), self._value_to_slider(self._display_max))
+        self.zero_controls_widget.setVisible(self._zero_jog_visible)
         self._syncing = False
         self._display_initialized = True
         self.set_target_value(current_value)
@@ -411,8 +436,9 @@ class JointRowWidget(QGroupBox):
                 definition.max_deg,
                 " °",
                 decimals=2,
-                step=0.5,
-                jog_enabled=True,
+                step=1.0,
+                main_adjust_enabled=True,
+                zero_jog_visible=True,
             )
         else:
             self.set_target_value(current_target)
@@ -430,6 +456,8 @@ class JointRowWidget(QGroupBox):
         effective = self._connected and self.active_checkbox.isChecked()
         self.minus_button.setEnabled(effective and self._jog_enabled)
         self.plus_button.setEnabled(effective and self._jog_enabled)
+        self.zero_minus_button.setEnabled(effective and self._zero_jog_visible)
+        self.zero_plus_button.setEnabled(effective and self._zero_jog_visible)
         self.slider.setEnabled(effective)
         self.spinbox.setEnabled(effective)
 
@@ -531,6 +559,11 @@ class MainWindow(QMainWindow):
         self.feedback_timer = QTimer(self)
         self.feedback_timer.setInterval(100)
         self.feedback_timer.timeout.connect(self._refresh_feedback)
+        self.step_repeat_timer = QTimer(self)
+        self.step_repeat_timer.setInterval(500)
+        self.step_repeat_timer.timeout.connect(self._repeat_step_adjust)
+        self._active_step_adjust_joint: Optional[str] = None
+        self._active_step_adjust_direction = 0
 
         self.connect_button = QPushButton("连接")
         self.disconnect_button = QPushButton("断开")
@@ -551,6 +584,7 @@ class MainWindow(QMainWindow):
         self.baudrate_spinbox = QSpinBox()
         self.timeout_spinbox = QDoubleSpinBox()
         self.write_timeout_spinbox = QDoubleSpinBox()
+        self.gui_step_spinbox = QDoubleSpinBox()
         self.save_connection_config_button = QPushButton("保存控制器配置")
         self.connection_config_status_label = QLabel("已载入")
 
@@ -612,6 +646,14 @@ class MainWindow(QMainWindow):
             timeout_spinbox.setSuffix(" s")
             timeout_spinbox.setFixedWidth(100)
 
+        self.gui_step_spinbox.setDecimals(2)
+        self.gui_step_spinbox.setRange(0.01, 1000.0)
+        self.gui_step_spinbox.setSingleStep(0.5)
+        self.gui_step_spinbox.setKeyboardTracking(False)
+        self.gui_step_spinbox.setValue(1.0)
+        self.gui_step_spinbox.setSuffix(" step")
+        self.gui_step_spinbox.setFixedWidth(100)
+
         self.connection_config_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         connection_layout = QHBoxLayout()
@@ -625,6 +667,8 @@ class MainWindow(QMainWindow):
         connection_layout.addWidget(self.timeout_spinbox)
         connection_layout.addWidget(QLabel("write_timeout_s"))
         connection_layout.addWidget(self.write_timeout_spinbox)
+        connection_layout.addWidget(QLabel("gui_step"))
+        connection_layout.addWidget(self.gui_step_spinbox)
         connection_layout.addWidget(self.save_connection_config_button)
         connection_layout.addWidget(self.connection_config_status_label)
         connection_layout.addStretch()
@@ -656,6 +700,7 @@ class MainWindow(QMainWindow):
         self.timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.write_timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.save_connection_config_button.clicked.connect(self._save_connection_config)
+        self.gui_step_spinbox.valueChanged.connect(self._apply_gui_step_to_rows)
 
     def _load_connection_config_fields(self, status_text: str = "已载入"):
         self._syncing_connection_config = True
@@ -878,8 +923,10 @@ class MainWindow(QMainWindow):
                 if self.hand.is_pip_dip_joint(joint_name):
                     row.set_gui_range_mm(*self._read_gui_range_mm(joint_name))
                 row.targetChanged.connect(self._set_joint_target)
-                row.jogStarted.connect(self._start_joint_jog)
-                row.jogStopped.connect(self._stop_joint_jog)
+                row.stepAdjustStarted.connect(self._start_step_adjust)
+                row.stepAdjustStopped.connect(self._stop_step_adjust)
+                row.zeroJogStarted.connect(self._start_joint_jog)
+                row.zeroJogStopped.connect(self._stop_joint_jog)
                 row.activeToggled.connect(self._set_joint_enabled)
                 row.configSaveRequested.connect(self._save_joint_config)
                 self.row_widgets[joint_name] = row
@@ -904,8 +951,9 @@ class MainWindow(QMainWindow):
                     definition.max_deg,
                     " °",
                     decimals=2,
-                    step=0.5,
-                    jog_enabled=True,
+                    step=self.gui_step_spinbox.value(),
+                    main_adjust_enabled=True,
+                    zero_jog_visible=True,
                 )
                 row.set_target_value(self._motor_target_values_deg.get(joint_name, clamped_value))
                 if not self.hand.connected:
@@ -917,14 +965,12 @@ class MainWindow(QMainWindow):
                 display_min, display_max = self._read_gui_range_mm(joint_name)
                 row.set_gui_range_mm(display_min, display_max)
                 unit_suffix = " mm"
-                step = 0.1
                 motor_target_deg = self._compute_pip_dip_motor_target_deg(joint_name)
                 row.set_motor_target_text(f"电机Target: {self._format_motor_angle_text(motor_target_deg)}")
             else:
                 display_min = definition.min_deg
                 display_max = definition.max_deg
                 unit_suffix = " °"
-                step = 0.5
 
             row.set_display_profile(
                 self.PARAHAND_MODE,
@@ -932,8 +978,9 @@ class MainWindow(QMainWindow):
                 display_max,
                 unit_suffix,
                 decimals=2,
-                step=step,
-                jog_enabled=False,
+                step=self.gui_step_spinbox.value(),
+                main_adjust_enabled=True,
+                zero_jog_visible=False,
             )
             row.set_target_value(self._display_target_for_joint(joint_name))
             if not self.hand.connected:
@@ -951,6 +998,45 @@ class MainWindow(QMainWindow):
         self._apply_control_mode_to_rows()
         if self.hand.connected:
             self._refresh_feedback()
+
+    def _apply_gui_step_to_rows(self, *_args):
+        if self.row_widgets:
+            self._apply_control_mode_to_rows()
+
+    def _get_gui_step(self) -> float:
+        return float(self.gui_step_spinbox.value())
+
+    def _apply_step_adjust(self, joint_name: str, direction: int):
+        row = self.row_widgets.get(joint_name)
+        if row is None:
+            return
+        current_value = row.get_target_value()
+        target_value = current_value + direction * self._get_gui_step()
+        clamped_value = row.set_target_value(target_value)
+        self._set_joint_target(joint_name, clamped_value)
+
+    def _start_step_adjust(self, joint_name: str, direction: int):
+        if not self.hand.connected:
+            self._set_status("请先连接设备")
+            return
+        if not self.row_widgets[joint_name].is_joint_enabled():
+            self._set_status(f"{joint_name} 未启用，已跳过控制")
+            return
+        self._active_step_adjust_joint = joint_name
+        self._active_step_adjust_direction = int(direction)
+        self._apply_step_adjust(joint_name, direction)
+        self.step_repeat_timer.start()
+
+    def _repeat_step_adjust(self):
+        if not self._active_step_adjust_joint or self._active_step_adjust_direction == 0:
+            return
+        self._apply_step_adjust(self._active_step_adjust_joint, self._active_step_adjust_direction)
+
+    def _stop_step_adjust(self, joint_name: str):
+        if self._active_step_adjust_joint == joint_name:
+            self.step_repeat_timer.stop()
+            self._active_step_adjust_joint = None
+            self._active_step_adjust_direction = 0
 
     def _set_connection_state(self, connected: bool):
         self.connect_button.setEnabled(not connected)
@@ -992,6 +1078,9 @@ class MainWindow(QMainWindow):
 
     def _disconnect_device(self):
         self.feedback_timer.stop()
+        self.step_repeat_timer.stop()
+        self._active_step_adjust_joint = None
+        self._active_step_adjust_direction = 0
         try:
             if self.hand.connected:
                 self.hand.disconnect()
@@ -1021,7 +1110,7 @@ class MainWindow(QMainWindow):
             self._set_status(f"使能失败: {exc}")
 
     def _show_zero_placeholder(self):
-        QMessageBox.information(self, "置零", "置零功能当前只是占位，尚未接入真实零位逻辑。")
+        QMessageBox.information(self, "置零", "调零请使用每个关节底部的 -/+ 按钮。")
 
     def _set_joint_enabled(self, joint_name: str, enabled: bool):
         previous_definition = self.hand.joint_to_motor.get(joint_name)
@@ -1119,9 +1208,12 @@ class MainWindow(QMainWindow):
             self._set_status(f"{joint_name} 未启用，已跳过点动")
             return
         try:
+            if self.control_mode != self.MOTOR_MODE:
+                self._set_status("调零仅在电机模式下可用")
+                return
             self.hand.jog_joint(joint_name, direction)
             sign = "+" if direction == 1 else "-"
-            self._set_status(f"{joint_name} 点动 {sign}")
+            self._set_status(f"{joint_name} 调零 {sign}")
         except Exception as exc:
             QMessageBox.critical(self, "点动失败", str(exc))
             self._set_status(f"点动失败: {exc}")
@@ -1133,7 +1225,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self.hand.jog_joint(joint_name, 0)
-            self._set_status(f"{joint_name} 点动停止")
+            self._set_status(f"{joint_name} 调零停止")
         except Exception as exc:
             QMessageBox.critical(self, "停止点动失败", str(exc))
             self._set_status(f"停止点动失败: {exc}")
