@@ -1,0 +1,135 @@
+ctrl_frequency: 50.0
+serial:
+  port: COM7
+  baudrate: 230400
+  timeout_s: 0.05
+  write_timeout_s: 0.05
+thumb:
+  cmc_1:
+    id: 13
+    range:
+    - -15
+    - 15
+    reverse: false
+    enabled: true
+  cmc_2:
+    id: 14
+    range:
+    - -30.0
+    - 90.0
+    reverse: true
+    enabled: true
+  mcp:
+    id: 15
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+  ip:
+    id: 16
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+index:
+  mcp_1:
+    id: 5
+    range:
+    - -45.0
+    - 10.0
+    reverse: false
+    enabled: true
+  mcp_2:
+    id: 4
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+  pip_dip:
+    id: 12
+    range:
+    - -255.0
+    - 255.0
+    gui_range_mm:
+    - 0.0
+    - 25.0
+    reverse: false
+    enabled: true
+middle:
+  mcp_1:
+    id: 6
+    range:
+    - -10
+    - 10
+    reverse: false
+    enabled: true
+  mcp_2:
+    id: 3
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+  pip_dip:
+    id: 11
+    range:
+    - -255.0
+    - 255.0
+    gui_range_mm:
+    - 0.0
+    - 25.0
+    reverse: false
+    enabled: true
+ring:
+  mcp_1:
+    id: 7
+    range:
+    - -10
+    - 10
+    reverse: false
+    enabled: true
+  mcp_2:
+    id: 2
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+  pip_dip:
+    id: 10
+    range:
+    - -255.0
+    - 255.0
+    gui_range_mm:
+    - 0.0
+    - 25.0
+    reverse: true
+    enabled: true
+little:
+  mcp_1:
+    id: 8
+    range:
+    - -10
+    - 10
+    reverse: false
+    enabled: true
+  mcp_2:
+    id: 1
+    range:
+    - 0.0
+    - 90.0
+    reverse: false
+    enabled: true
+  pip_dip:
+    id: 9
+    range:
+    - -255.0
+    - 255.0
+    gui_range_mm:
+    - 0.0
+    - 25.0
+    reverse: false
+    enabled: true
