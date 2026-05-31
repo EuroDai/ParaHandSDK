@@ -13,6 +13,12 @@ import motor
 
 
 CONFIG_KEYS = {"ctrl_frequency", "serial", "baudrate"}
+COUPLED_MCP1_JOINTS = (
+    "index.mcp_1",
+    "middle.mcp_1",
+    "ring.mcp_1",
+    "little.mcp_1",
+)
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
 DEFAULT_FEEDBACK = {
     "position_deg": None,
@@ -55,6 +61,7 @@ class ParaHand:
         self.ctrl_frequency = self._parse_ctrl_frequency(self.config.get("ctrl_frequency", 50))
         self.joint_to_motor: Dict[str, JointDefinition] = {}
         self.motor_to_joint: Dict[int, str] = {}
+        self._last_joint_targets_deg: Dict[str, float] = {}
         self._rebuild_from_config(self.config)
 
     @property
@@ -109,6 +116,9 @@ class ParaHand:
 
     def set_joint_positions(self, targets_deg: Dict[str, float], speed: Optional[Any] = None) -> Dict[str, str]:
         '''按关节名批量设置目标角度。'''
+        return self._dispatch_joint_positions(self.resolve_joint_targets(targets_deg), speed)
+
+    def _dispatch_joint_positions(self, targets_deg: Dict[str, float], speed: Optional[Any] = None) -> Dict[str, str]:
         if not targets_deg:
             raise ValueError("targets_deg 不能为空")
 
@@ -132,6 +142,14 @@ class ParaHand:
             if command_id:
                 command_ids[joint_name] = command_id
         return command_ids
+
+    def resolve_joint_targets(self, targets_deg: Dict[str, float]) -> Dict[str, float]:
+        '''解析关节目标并应用 mcp_1 联动限位。'''
+        resolved_targets = {joint_name: float(angle_deg) for joint_name, angle_deg in targets_deg.items()}
+        if any(joint_name in COUPLED_MCP1_JOINTS for joint_name in resolved_targets):
+            resolved_targets.update(self._resolve_coupled_mcp1_targets(resolved_targets))
+        self._last_joint_targets_deg.update(resolved_targets)
+        return resolved_targets
 
     def hand_position_map_to_joint_targets_deg(self, positions: Any) -> Dict[str, float]:
         '''将按关节名组织的整手位置语义值转换为关节角度目标。'''
@@ -211,6 +229,53 @@ class ParaHand:
                 targets_deg[joint_name] = math.degrees(raw_value)
         return targets_deg
 
+    def _resolve_coupled_mcp1_targets(self, requested_targets_deg: Dict[str, float]) -> Dict[str, float]:
+        coupled_targets = {
+            joint_name: float(self._get_coupled_joint_baseline(joint_name, requested_targets_deg))
+            for joint_name in COUPLED_MCP1_JOINTS
+        }
+
+        index_name, middle_name, ring_name, little_name = COUPLED_MCP1_JOINTS
+        index_definition = self._get_joint_definition(index_name)
+        middle_definition = self._get_joint_definition(middle_name)
+        ring_definition = self._get_joint_definition(ring_name)
+        little_definition = self._get_joint_definition(little_name)
+
+        index_value = self._clamp_value(coupled_targets[index_name], index_definition.min_deg, index_definition.max_deg)
+        little_value = self._clamp_value(coupled_targets[little_name], little_definition.min_deg, little_definition.max_deg)
+
+        middle_lower = max(index_value, middle_definition.min_deg)
+        middle_upper = min(little_value, middle_definition.max_deg)
+        middle_value = self._clamp_value(coupled_targets[middle_name], middle_lower, middle_upper)
+
+        ring_lower = max(middle_value, ring_definition.min_deg)
+        ring_upper = min(little_value, ring_definition.max_deg)
+        ring_value = self._clamp_value(coupled_targets[ring_name], ring_lower, ring_upper)
+
+        if middle_value > ring_value:
+            middle_value = ring_value
+            middle_value = self._clamp_value(middle_value, middle_lower, min(little_value, middle_definition.max_deg))
+
+        return {
+            index_name: index_value,
+            middle_name: middle_value,
+            ring_name: ring_value,
+            little_name: little_value,
+        }
+
+    def _get_coupled_joint_baseline(self, joint_name: str, requested_targets_deg: Dict[str, float]) -> float:
+        if joint_name in requested_targets_deg:
+            return float(requested_targets_deg[joint_name])
+        if joint_name in self._last_joint_targets_deg:
+            return float(self._last_joint_targets_deg[joint_name])
+        definition = self._get_joint_definition(joint_name)
+        return self._clamp_value(0.0, definition.min_deg, definition.max_deg)
+
+    def _clamp_value(self, value: float, lower: float, upper: float) -> float:
+        if lower > upper:
+            return float(lower)
+        return max(float(lower), min(float(upper), float(value)))
+
     def _conpensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_m: float) -> float:
         '''根据同一手指的 mcp_2 弧度值和 pip_dip 米制输入计算 pip_dip 目标角度。'''
         return 180* (1000 * pip_dip_m - math.sqrt(587.75 - 378.98 * math.cos(2 - mcp_2_angle_rad)) + 27.23) / (5 * math.pi) - 255
@@ -220,7 +285,13 @@ class ParaHand:
         self._validate_motor_id(motor_id)
         if not self._is_motor_enabled(motor_id):
             return ""
-        speed_ratio = 0.5 if speed is None else self._normalize_speed_value(speed)
+
+        if speed is None:
+            joint_name = self.motor_to_joint.get(int(motor_id))
+            speed_ratio = 0.8 if joint_name and self.is_pip_dip_joint(joint_name) else 0.5
+        else:
+            speed_ratio = self._normalize_speed_value(speed)
+
         target_angle = self._to_known_motor_angle(motor_id, angle_deg)
         return self.motor.set_motor_angle(motor_id, math.radians(target_angle), speed=speed_ratio)
 
@@ -601,6 +672,14 @@ class ParaHand:
         self.motor.write_timeout_s = write_timeout_s
         self.joint_to_motor = joint_to_motor
         self.motor_to_joint = {definition.motor_id: name for name, definition in joint_to_motor.items()}
+        self._last_joint_targets_deg = {
+            joint_name: self._clamp_value(
+                self._last_joint_targets_deg.get(joint_name, 0.0),
+                definition.min_deg,
+                definition.max_deg,
+            )
+            for joint_name, definition in joint_to_motor.items()
+        }
 
     def _split_joint_name(self, joint_name: str) -> tuple[str, str]:
         '''拆分完整关节名为手指名和局部名。'''

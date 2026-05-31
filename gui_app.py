@@ -21,6 +21,7 @@ try:
         QCheckBox,
         QComboBox,
         QDoubleSpinBox,
+        QGridLayout,
         QGroupBox,
         QHBoxLayout,
         QLabel,
@@ -151,7 +152,7 @@ class JointRowWidget(QGroupBox):
         self._display_max = 0.0
         self._display_unit_suffix = " °"
         self._display_decimals = 2
-        self._display_step = 0.5
+        self._display_step = 1.0
 
         self.minus_button = QPushButton("-")
         self.plus_button = QPushButton("+")
@@ -161,13 +162,29 @@ class JointRowWidget(QGroupBox):
         self.zero_controls_widget = QWidget()
         self.slider = QSlider(Qt.Horizontal)
         self.spinbox = QDoubleSpinBox()
-        self.actual_label = QLabel("实际位置: --")
+        self.actual_label = QLabel("[--]")
         self.motor_target_label = QLabel("")
-        self.feedback_label = QLabel(
-            "反馈: online=-- | state=-- | error=-- | temp=-- | bus=-- | speed=-- | current=--"
-        )
         self.motor_actual_angle_label = QLabel("")
-        self.active_checkbox = QCheckBox("启用")
+        self.active_checkbox = QCheckBox()
+
+        self.details_toggle_button = QToolButton()
+        self.details_container = QWidget()
+        self.status_grid_widget = QWidget()
+        self.online_key_label = QLabel("online")
+        self.online_value_label = QLabel("--")
+        self.state_key_label = QLabel("state")
+        self.state_value_label = QLabel("--")
+        self.bus_key_label = QLabel("bus")
+        self.bus_value_label = QLabel("--")
+        self.error_key_label = QLabel("error")
+        self.error_value_label = QLabel("--")
+        self.speed_key_label = QLabel("speed")
+        self.speed_value_label = QLabel("--")
+        self.temp_key_label = QLabel("temp")
+        self.temp_value_label = QLabel("--")
+        self.current_key_label = QLabel("current")
+        self.current_value_label = QLabel("--")
+        self.extra_labels_widget = QWidget()
 
         self.motor_id_spinbox = QSpinBox()
         self.min_spinbox = QDoubleSpinBox()
@@ -181,10 +198,12 @@ class JointRowWidget(QGroupBox):
         self.config_status_label = QLabel("已载入")
         self.config_toggle_button = QToolButton()
         self.config_container = QWidget()
+        self.config_header_widget = QWidget()
 
         self._build_ui()
         self._connect_signals()
         self.update_definition(definition)
+        self._toggle_details_panel(False)
         self._toggle_config_panel(False)
         self.set_motion_enabled(False)
         self.set_config_editable(False)
@@ -198,10 +217,12 @@ class JointRowWidget(QGroupBox):
         self.slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.spinbox.setDecimals(2)
-        self.spinbox.setSingleStep(0.5)
+        self.spinbox.setSingleStep(1.0)
         self.spinbox.setKeyboardTracking(False)
         self.spinbox.setSuffix(" °")
         self.spinbox.setFixedWidth(96)
+        self.spinbox.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.spinbox.setAlignment(Qt.AlignCenter)
 
         self.motor_id_spinbox.setRange(1, 16)
         self.motor_id_spinbox.setFixedWidth(64)
@@ -222,6 +243,11 @@ class JointRowWidget(QGroupBox):
             mm_spinbox.setSuffix(" mm")
             mm_spinbox.setFixedWidth(96)
 
+        self.details_toggle_button.setText("详情")
+        self.details_toggle_button.setCheckable(True)
+        self.details_toggle_button.setArrowType(Qt.RightArrow)
+        self.details_toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+
         self.config_toggle_button.setText("配置")
         self.config_toggle_button.setCheckable(True)
         self.config_toggle_button.setArrowType(Qt.RightArrow)
@@ -229,23 +255,46 @@ class JointRowWidget(QGroupBox):
 
         self.actual_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.motor_target_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.feedback_label.setWordWrap(True)
-        self.feedback_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.motor_actual_angle_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.config_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
         controls_layout = QHBoxLayout()
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(6)
+        controls_layout.addWidget(self.active_checkbox)
         controls_layout.addWidget(self.minus_button)
-        controls_layout.addWidget(self.slider)
+        controls_layout.addWidget(self.slider, 1)
         controls_layout.addWidget(self.spinbox)
         controls_layout.addWidget(self.plus_button)
+        controls_layout.addSpacing(6)
+        controls_layout.addWidget(self.details_toggle_button)
 
-        summary_layout = QHBoxLayout()
-        summary_layout.addWidget(self.active_checkbox)
-        summary_layout.addWidget(self.actual_label)
-        summary_layout.addWidget(self.motor_target_label)
-        summary_layout.addStretch()
-        summary_layout.addWidget(self.config_toggle_button)
+        status_grid = QGridLayout()
+        status_grid.setContentsMargins(0, 0, 0, 0)
+        status_grid.setHorizontalSpacing(10)
+        status_grid.setVerticalSpacing(4)
+        status_grid.addWidget(self.online_key_label, 0, 0)
+        status_grid.addWidget(self.online_value_label, 0, 1)
+        status_grid.addWidget(self.state_key_label, 1, 0)
+        status_grid.addWidget(self.state_value_label, 1, 1)
+        status_grid.addWidget(self.bus_key_label, 1, 2)
+        status_grid.addWidget(self.bus_value_label, 1, 3)
+        status_grid.addWidget(self.error_key_label, 2, 0)
+        status_grid.addWidget(self.error_value_label, 2, 1)
+        status_grid.addWidget(self.speed_key_label, 2, 2)
+        status_grid.addWidget(self.speed_value_label, 2, 3)
+        status_grid.addWidget(self.temp_key_label, 3, 0)
+        status_grid.addWidget(self.temp_value_label, 3, 1)
+        status_grid.addWidget(self.current_key_label, 3, 2)
+        status_grid.addWidget(self.current_value_label, 3, 3)
+        self.status_grid_widget.setLayout(status_grid)
+
+        extra_layout = QVBoxLayout()
+        extra_layout.setContentsMargins(0, 0, 0, 0)
+        extra_layout.setSpacing(2)
+        extra_layout.addWidget(self.motor_target_label)
+        extra_layout.addWidget(self.motor_actual_angle_label)
+        self.extra_labels_widget.setLayout(extra_layout)
 
         zero_layout = QHBoxLayout()
         zero_layout.setContentsMargins(0, 0, 0, 0)
@@ -255,37 +304,74 @@ class JointRowWidget(QGroupBox):
         zero_layout.addStretch()
         self.zero_controls_widget.setLayout(zero_layout)
 
-        config_layout = QHBoxLayout()
-        config_layout.setContentsMargins(0, 0, 0, 0)
-        config_layout.addWidget(QLabel("电机ID"))
-        config_layout.addWidget(self.motor_id_spinbox)
-        config_layout.addWidget(QLabel("最小"))
-        config_layout.addWidget(self.min_spinbox)
-        config_layout.addWidget(QLabel("最大"))
-        config_layout.addWidget(self.max_spinbox)
-        config_layout.addWidget(self.gui_min_mm_label)
-        config_layout.addWidget(self.gui_min_mm_spinbox)
-        config_layout.addWidget(self.gui_max_mm_label)
-        config_layout.addWidget(self.gui_max_mm_spinbox)
-        config_layout.addWidget(self.reverse_checkbox)
-        config_layout.addWidget(self.save_config_button)
-        config_layout.addWidget(self.config_status_label)
-        config_layout.addStretch()
-        self.config_container.setLayout(config_layout)
+        config_header_layout = QHBoxLayout()
+        config_header_layout.setContentsMargins(0, 0, 0, 0)
+        config_header_layout.addWidget(self.config_toggle_button)
+        config_header_layout.addWidget(self.save_config_button)
+        config_header_layout.addWidget(self.config_status_label)
+        config_header_layout.addStretch()
+        self.config_header_widget.setLayout(config_header_layout)
 
-        if not self._is_pip_dip:
+        config_layout = QVBoxLayout()
+        config_layout.setContentsMargins(18, 0, 0, 0)
+        config_layout.setSpacing(6)
+
+        motor_id_layout = QHBoxLayout()
+        motor_id_layout.setContentsMargins(0, 0, 0, 0)
+        motor_id_layout.addWidget(QLabel("电机ID"))
+        motor_id_layout.addWidget(self.motor_id_spinbox)
+        motor_id_layout.addStretch()
+
+        range_layout = QHBoxLayout()
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.addWidget(QLabel("最小/最大"))
+        range_layout.addWidget(self.min_spinbox)
+        range_layout.addWidget(QLabel("/"))
+        range_layout.addWidget(self.max_spinbox)
+        range_layout.addStretch()
+
+        reverse_layout = QHBoxLayout()
+        reverse_layout.setContentsMargins(0, 0, 0, 0)
+        reverse_layout.addWidget(QLabel("反向"))
+        reverse_layout.addWidget(self.reverse_checkbox)
+        reverse_layout.addStretch()
+
+        config_layout.addLayout(motor_id_layout)
+        config_layout.addLayout(range_layout)
+
+        if self._is_pip_dip:
+            gui_range_layout = QHBoxLayout()
+            gui_range_layout.setContentsMargins(0, 0, 0, 0)
+            gui_range_layout.addWidget(self.gui_min_mm_label)
+            gui_range_layout.addWidget(self.gui_min_mm_spinbox)
+            gui_range_layout.addWidget(self.gui_max_mm_label)
+            gui_range_layout.addWidget(self.gui_max_mm_spinbox)
+            gui_range_layout.addStretch()
+            config_layout.addLayout(gui_range_layout)
+        else:
             self.gui_min_mm_label.hide()
             self.gui_min_mm_spinbox.hide()
             self.gui_max_mm_label.hide()
             self.gui_max_mm_spinbox.hide()
 
+        config_layout.addLayout(reverse_layout)
+        self.config_container.setLayout(config_layout)
+
+        details_layout = QVBoxLayout()
+        details_layout.setContentsMargins(12, 0, 0, 0)
+        details_layout.setSpacing(6)
+        details_layout.addWidget(self.status_grid_widget)
+        details_layout.addWidget(self.extra_labels_widget)
+        details_layout.addWidget(self.zero_controls_widget)
+        details_layout.addWidget(self.config_header_widget)
+        details_layout.addWidget(self.config_container)
+        self.details_container.setLayout(details_layout)
+
         layout = QVBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
         layout.addLayout(controls_layout)
-        layout.addLayout(summary_layout)
-        layout.addWidget(self.motor_actual_angle_label)
-        layout.addWidget(self.feedback_label)
-        layout.addWidget(self.zero_controls_widget)
-        layout.addWidget(self.config_container)
+        layout.addWidget(self.details_container)
         self.setLayout(layout)
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
@@ -310,6 +396,7 @@ class JointRowWidget(QGroupBox):
         self.reverse_checkbox.toggled.connect(self._mark_config_dirty)
         self.active_checkbox.toggled.connect(self._on_active_toggled)
         self.save_config_button.clicked.connect(self._request_config_save)
+        self.details_toggle_button.toggled.connect(self._toggle_details_panel)
         self.config_toggle_button.toggled.connect(self._toggle_config_panel)
 
     def _mark_config_dirty(self, *_args):
@@ -337,10 +424,20 @@ class JointRowWidget(QGroupBox):
             payload["gui_range_mm"] = [self.gui_min_mm_spinbox.value(), self.gui_max_mm_spinbox.value()]
         self.configSaveRequested.emit(self.joint_name, payload)
 
+    def _toggle_details_panel(self, expanded: bool):
+        self.details_toggle_button.blockSignals(True)
+        self.details_toggle_button.setChecked(expanded)
+        self.details_toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.details_toggle_button.setText("详情")
+        self.details_toggle_button.blockSignals(False)
+        self.details_container.setVisible(expanded)
+        self.updateGeometry()
+
     def _toggle_config_panel(self, expanded: bool):
         self.config_toggle_button.blockSignals(True)
         self.config_toggle_button.setChecked(expanded)
         self.config_toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.config_toggle_button.setText("配置")
         self.config_toggle_button.blockSignals(False)
         self.config_container.setVisible(expanded)
         self.updateGeometry()
@@ -400,6 +497,7 @@ class JointRowWidget(QGroupBox):
         self.spinbox.setRange(self._display_min, self._display_max)
         self.slider.setRange(self._value_to_slider(self._display_min), self._value_to_slider(self._display_max))
         self.zero_controls_widget.setVisible(self._zero_jog_visible)
+        self.extra_labels_widget.setVisible(self._control_mode == self.PARAHAND_MODE and self._is_pip_dip)
         self._syncing = False
         self._display_initialized = True
         self.set_target_value(current_value)
@@ -474,6 +572,7 @@ class JointRowWidget(QGroupBox):
         self.reverse_checkbox.setEnabled(enabled)
         self.save_config_button.setEnabled(enabled)
         self.config_toggle_button.setEnabled(True)
+        self.details_toggle_button.setEnabled(True)
         self.active_checkbox.setEnabled(True)
 
     def is_joint_enabled(self) -> bool:
@@ -481,10 +580,10 @@ class JointRowWidget(QGroupBox):
 
     def set_actual_display_value(self, value: Optional[float], unit_suffix: Optional[str] = None):
         if not self.active_checkbox.isChecked():
-            self.actual_label.setText("实际位置: 未启用")
+            self.actual_label.setText("[未启用]")
             return
         suffix = self._display_unit_suffix if unit_suffix is None else unit_suffix
-        self.actual_label.setText(f"实际位置: {self._format_display_value(value, suffix)}")
+        self.actual_label.setText(f"[{self._format_display_value(value, suffix)}]")
 
     def set_motor_target_text(self, text: str):
         self.motor_target_label.setText(text)
@@ -499,23 +598,26 @@ class JointRowWidget(QGroupBox):
         actual_unit_suffix: Optional[str] = None,
     ):
         if not self.active_checkbox.isChecked():
-            self.actual_label.setText("实际位置: 未启用")
+            self.actual_label.setText("[未启用]")
             self.motor_target_label.setText("")
             self.motor_actual_angle_label.setText("")
-            self.feedback_label.setText("反馈: 未启用")
+            self.online_value_label.setText("未启用")
+            self.state_value_label.setText("--")
+            self.bus_value_label.setText("--")
+            self.error_value_label.setText("--")
+            self.speed_value_label.setText("--")
+            self.temp_value_label.setText("--")
+            self.current_value_label.setText("--")
             return
 
         self.set_actual_display_value(actual_display_value, actual_unit_suffix)
-        parts = [
-            f"online={self._format_bool(feedback.get('online'))}",
-            f"state={self._format_value(feedback.get('fsm_state'))}",
-            f"error={self._format_value(feedback.get('error_code'))}",
-            f"temp={self._format_number(feedback.get('temp'), '°C')}",
-            f"bus={self._format_number(feedback.get('bus_voltage'), 'V')}",
-            f"speed={self._format_number(feedback.get('speed_pct'), '%')}",
-            f"current={self._format_number(feedback.get('current_mA'), 'mA')}",
-        ]
-        self.feedback_label.setText("反馈: " + " | ".join(parts))
+        self.online_value_label.setText(self._format_bool(feedback.get('online')))
+        self.state_value_label.setText(self._format_value(feedback.get('fsm_state')))
+        self.bus_value_label.setText(self._format_number(feedback.get('bus_voltage'), 'V'))
+        self.error_value_label.setText(self._format_value(feedback.get('error_code')))
+        self.speed_value_label.setText(self._format_number(feedback.get('speed_pct'), '%'))
+        self.temp_value_label.setText(self._format_number(feedback.get('temp'), '°C'))
+        self.current_value_label.setText(self._format_number(feedback.get('current_mA'), 'mA'))
 
     def _format_display_value(self, value: Any, suffix: str) -> str:
         if value is None:
@@ -560,7 +662,7 @@ class MainWindow(QMainWindow):
         self.feedback_timer.setInterval(100)
         self.feedback_timer.timeout.connect(self._refresh_feedback)
         self.step_repeat_timer = QTimer(self)
-        self.step_repeat_timer.setInterval(500)
+        self.step_repeat_timer.setInterval(50)
         self.step_repeat_timer.timeout.connect(self._repeat_step_adjust)
         self._active_step_adjust_joint: Optional[str] = None
         self._active_step_adjust_direction = 0
@@ -578,7 +680,11 @@ class MainWindow(QMainWindow):
         self.config_help_label = QLabel(
             "顶部可切换电机模式与 ParaHand 模式；ParaHand 模式下普通关节显示角度，pip_dip 显示毫米并统一走 set_hand_positions。"
         )
-        self.connection_config_box = QGroupBox("控制器配置")
+        self.step_hint_label = QLabel("说明：ParaHand 模式下，pip_dip 关节的点动步长固定为 gui_step 的 0.5 倍。")
+        self.connection_config_toggle_button = QToolButton()
+        self.connection_config_header_widget = QWidget()
+        self.connection_config_container = QWidget()
+        self.connection_config_box = QGroupBox()
         self.ctrl_frequency_spinbox = QDoubleSpinBox()
         self.port_input = QLineEdit()
         self.baudrate_spinbox = QSpinBox()
@@ -594,13 +700,13 @@ class MainWindow(QMainWindow):
         self.rows_layout = QVBoxLayout()
 
         self._build_ui()
+        self._toggle_connection_config_panel(False)
         self._load_connection_config_fields()
         self._connect_signals()
         self._populate_joint_rows()
         self._refresh_hand_joint_order()
         self._set_connection_state(False)
         self._apply_control_mode_to_rows()
-        self.zero_button.setEnabled(True)
         self._set_status(f"就绪 | 配置: {self.hand.config_path}")
 
     def _build_ui(self):
@@ -614,14 +720,20 @@ class MainWindow(QMainWindow):
         toolbar_layout.addWidget(self.connect_button)
         toolbar_layout.addWidget(self.disconnect_button)
         toolbar_layout.addWidget(self.enable_checkbox)
-        toolbar_layout.addWidget(self.zero_button)
         toolbar_layout.addWidget(self.mode_label)
         toolbar_layout.addWidget(self.control_mode_combo)
         toolbar_layout.addStretch()
-        toolbar_layout.addWidget(self.status_label)
+
+        status_layout = QHBoxLayout()
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
 
         self.config_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.config_label.setWordWrap(True)
+        self.status_label.setWordWrap(True)
         self.config_help_label.setWordWrap(True)
+        self.step_hint_label.setWordWrap(True)
         self.empty_label.setWordWrap(True)
 
         self.ctrl_frequency_spinbox.setDecimals(2)
@@ -654,25 +766,54 @@ class MainWindow(QMainWindow):
         self.gui_step_spinbox.setSuffix(" step")
         self.gui_step_spinbox.setFixedWidth(100)
 
+        self.connection_config_toggle_button.setText("控制器配置")
+        self.connection_config_toggle_button.setCheckable(True)
+        self.connection_config_toggle_button.setArrowType(Qt.RightArrow)
+        self.connection_config_toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.connection_config_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        connection_layout = QHBoxLayout()
-        connection_layout.addWidget(QLabel("ctrl_frequency"))
-        connection_layout.addWidget(self.ctrl_frequency_spinbox)
-        connection_layout.addWidget(QLabel("port"))
-        connection_layout.addWidget(self.port_input)
-        connection_layout.addWidget(QLabel("baudrate"))
-        connection_layout.addWidget(self.baudrate_spinbox)
-        connection_layout.addWidget(QLabel("timeout_s"))
-        connection_layout.addWidget(self.timeout_spinbox)
-        connection_layout.addWidget(QLabel("write_timeout_s"))
-        connection_layout.addWidget(self.write_timeout_spinbox)
-        connection_layout.addWidget(QLabel("gui_step"))
-        connection_layout.addWidget(self.gui_step_spinbox)
-        connection_layout.addWidget(self.save_connection_config_button)
-        connection_layout.addWidget(self.connection_config_status_label)
-        connection_layout.addStretch()
-        self.connection_config_box.setLayout(connection_layout)
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.addWidget(self.connection_config_toggle_button)
+        header_layout.addStretch()
+        self.connection_config_header_widget.setLayout(header_layout)
+
+        connection_grid = QGridLayout()
+        connection_grid.setContentsMargins(12, 0, 0, 0)
+        connection_grid.setHorizontalSpacing(16)
+        connection_grid.setVerticalSpacing(8)
+        connection_grid.addWidget(QLabel("控制频率"), 0, 0)
+        connection_grid.addWidget(self.ctrl_frequency_spinbox, 0, 1)
+        connection_grid.addWidget(QLabel("timeout_s"), 0, 2)
+        connection_grid.addWidget(self.timeout_spinbox, 0, 3)
+        connection_grid.addWidget(QLabel("port"), 1, 0)
+        connection_grid.addWidget(self.port_input, 1, 1)
+        connection_grid.addWidget(QLabel("write_timeout_s"), 1, 2)
+        connection_grid.addWidget(self.write_timeout_spinbox, 1, 3)
+        connection_grid.addWidget(QLabel("baudrate"), 2, 0)
+        connection_grid.addWidget(self.baudrate_spinbox, 2, 1)
+        connection_grid.addWidget(QLabel("jog步长"), 2, 2)
+        connection_grid.addWidget(self.gui_step_spinbox, 2, 3)
+
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(12, 0, 0, 0)
+        footer_layout.addWidget(self.save_connection_config_button)
+        footer_layout.addWidget(self.connection_config_status_label)
+        footer_layout.addStretch()
+
+        container_layout = QVBoxLayout()
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(6)
+        container_layout.addLayout(connection_grid)
+        container_layout.addLayout(footer_layout)
+        self.connection_config_container.setLayout(container_layout)
+
+        box_layout = QVBoxLayout()
+        box_layout.setContentsMargins(8, 8, 8, 8)
+        box_layout.setSpacing(6)
+        box_layout.addWidget(self.connection_config_header_widget)
+        box_layout.addWidget(self.connection_config_container)
+        self.connection_config_box.setLayout(box_layout)
 
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
         self.rows_layout.setSpacing(12)
@@ -682,8 +823,10 @@ class MainWindow(QMainWindow):
         self.scroll_area.setWidget(self.rows_container)
 
         main_layout.addLayout(toolbar_layout)
+        main_layout.addLayout(status_layout)
         main_layout.addWidget(self.config_label)
         main_layout.addWidget(self.config_help_label)
+        main_layout.addWidget(self.step_hint_label)
         main_layout.addWidget(self.connection_config_box)
         main_layout.addWidget(self.scroll_area)
         self.setCentralWidget(central_widget)
@@ -692,8 +835,8 @@ class MainWindow(QMainWindow):
         self.connect_button.clicked.connect(self._connect_device)
         self.disconnect_button.clicked.connect(self._disconnect_device)
         self.enable_checkbox.toggled.connect(self._toggle_enable)
-        self.zero_button.clicked.connect(self._show_zero_placeholder)
         self.control_mode_combo.currentIndexChanged.connect(self._on_control_mode_changed)
+        self.connection_config_toggle_button.toggled.connect(self._toggle_connection_config_panel)
         self.ctrl_frequency_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.port_input.textChanged.connect(self._mark_connection_config_dirty)
         self.baudrate_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
@@ -701,6 +844,14 @@ class MainWindow(QMainWindow):
         self.write_timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.save_connection_config_button.clicked.connect(self._save_connection_config)
         self.gui_step_spinbox.valueChanged.connect(self._apply_gui_step_to_rows)
+
+    def _toggle_connection_config_panel(self, expanded: bool):
+        self.connection_config_toggle_button.blockSignals(True)
+        self.connection_config_toggle_button.setChecked(expanded)
+        self.connection_config_toggle_button.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.connection_config_toggle_button.setText("控制器配置")
+        self.connection_config_toggle_button.blockSignals(False)
+        self.connection_config_container.setVisible(expanded)
 
     def _load_connection_config_fields(self, status_text: str = "已载入"):
         self._syncing_connection_config = True
@@ -821,9 +972,9 @@ class MainWindow(QMainWindow):
 
     def _inverse_compensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_deg: float) -> float:
         return (
-            -5 * (float(pip_dip_deg) + 255.0)
-            - math.sqrt(587.75 - 378.98 * math.cos(2 - float(mcp_2_angle_rad)))
-            + 27.23
+            ((float(pip_dip_deg) + 255.0) * 5.0 * math.pi / 180.0)
+            + math.sqrt(587.75 - 378.98 * math.cos(2 - float(mcp_2_angle_rad)))
+            - 27.23
         ) / 1000.0
 
     def _joint_target_map_to_hand_positions(self, targets_deg: Dict[str, Any]) -> Dict[str, float]:
@@ -916,7 +1067,9 @@ class MainWindow(QMainWindow):
         self.empty_label.hide()
         for finger_name, joints in self._group_joints_by_finger().items():
             finger_box = QGroupBox(finger_name)
-            finger_layout = FlowLayout(margin=8, spacing=12)
+            finger_layout = QVBoxLayout()
+            finger_layout.setContentsMargins(8, 8, 8, 8)
+            finger_layout.setSpacing(8)
 
             for joint_name, local_joint_name, definition in joints:
                 row = JointRowWidget(joint_name, definition, display_name=local_joint_name)
@@ -932,6 +1085,7 @@ class MainWindow(QMainWindow):
                 self.row_widgets[joint_name] = row
                 finger_layout.addWidget(row)
 
+            finger_layout.addStretch()
             finger_box.setLayout(finger_layout)
             self.rows_layout.addWidget(finger_box)
         self.rows_layout.addStretch()
@@ -1003,15 +1157,18 @@ class MainWindow(QMainWindow):
         if self.row_widgets:
             self._apply_control_mode_to_rows()
 
-    def _get_gui_step(self) -> float:
-        return float(self.gui_step_spinbox.value())
+    def _get_gui_step(self, joint_name: Optional[str] = None) -> float:
+        step_value = float(self.gui_step_spinbox.value())
+        if joint_name and self.control_mode == self.PARAHAND_MODE and self.hand.is_pip_dip_joint(joint_name):
+            return step_value * 0.5
+        return step_value
 
     def _apply_step_adjust(self, joint_name: str, direction: int):
         row = self.row_widgets.get(joint_name)
         if row is None:
             return
         current_value = row.get_target_value()
-        target_value = current_value + direction * self._get_gui_step()
+        target_value = current_value + direction * self._get_gui_step(joint_name)
         clamped_value = row.set_target_value(target_value)
         self._set_joint_target(joint_name, clamped_value)
 
@@ -1110,7 +1267,7 @@ class MainWindow(QMainWindow):
             self._set_status(f"使能失败: {exc}")
 
     def _show_zero_placeholder(self):
-        QMessageBox.information(self, "置零", "调零请使用每个关节底部的 -/+ 按钮。")
+        QMessageBox.information(self, "置零", "调零请使用每个关节详情中的 -/+ 按钮。")
 
     def _set_joint_enabled(self, joint_name: str, enabled: bool):
         previous_definition = self.hand.joint_to_motor.get(joint_name)
@@ -1172,10 +1329,10 @@ class MainWindow(QMainWindow):
         try:
             if self.control_mode == self.MOTOR_MODE:
                 angle_deg = float(display_value)
-                self.hand.set_joint_positions({joint_name: angle_deg})
-                self._motor_target_values_deg[joint_name] = angle_deg
-                self._sync_hand_targets_from_motor_targets()
-                self._set_status(f"已发送 {joint_name} -> {angle_deg:.2f} °")
+                resolved_targets = self.hand.resolve_joint_targets({joint_name: angle_deg})
+                self.hand._dispatch_joint_positions(resolved_targets)
+                self._apply_resolved_joint_targets_to_gui(resolved_targets)
+                self._set_status(f"已发送 {joint_name} -> {resolved_targets[joint_name]:.2f} °")
                 return
 
             if not self._feedback_initialized:
@@ -1184,18 +1341,31 @@ class MainWindow(QMainWindow):
                 return
 
             self._hand_target_positions[joint_name] = self._display_value_to_hand_position(joint_name, display_value)
+            requested_targets_deg = self.hand.hand_position_map_to_joint_targets_deg(self._hand_target_positions)
+            resolved_targets = self.hand.resolve_joint_targets(requested_targets_deg)
+            self._apply_resolved_joint_targets_to_gui(resolved_targets)
             full_positions = [self._hand_target_positions[name] for name in self.hand_joint_order]
             self.hand.set_hand_positions(full_positions)
-            self._sync_motor_targets_from_hand_targets()
-            if self.hand.is_pip_dip_joint(joint_name):
-                self.row_widgets[joint_name].set_motor_target_text(
-                    f"电机Target: {self._format_motor_angle_text(self._compute_pip_dip_motor_target_deg(joint_name))}"
-                )
             unit_suffix = " mm" if self.hand.is_pip_dip_joint(joint_name) else " °"
-            self._set_status(f"已发送 {joint_name} -> {display_value:.2f}{unit_suffix}")
+            self._set_status(f"已发送 {joint_name} -> {self._display_target_for_joint(joint_name):.2f}{unit_suffix}")
         except Exception as exc:
             QMessageBox.critical(self, "发送目标失败", str(exc))
             self._set_status(f"发送目标失败: {exc}")
+
+    def _apply_resolved_joint_targets_to_gui(self, resolved_targets_deg: Dict[str, float]):
+        if not resolved_targets_deg:
+            return
+        self._motor_target_values_deg.update({joint_name: float(value) for joint_name, value in resolved_targets_deg.items()})
+        self._sync_hand_targets_from_motor_targets()
+        for joint_name in resolved_targets_deg:
+            row = self.row_widgets.get(joint_name)
+            if row is None:
+                continue
+            row.set_target_value(self._display_target_for_joint(joint_name))
+            if self.control_mode == self.PARAHAND_MODE and self.hand.is_pip_dip_joint(joint_name):
+                row.set_motor_target_text(
+                    f"电机Target: {self._format_motor_angle_text(self._compute_pip_dip_motor_target_deg(joint_name))}"
+                )
 
     def _start_joint_jog(self, joint_name: str, direction: int):
         if self.control_mode != self.MOTOR_MODE:

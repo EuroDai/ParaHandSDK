@@ -1,6 +1,6 @@
 ctrl_frequency: 50.0
 serial:
-  port: COM7
+  port: COM8
   baudrate: 230400
   timeout_s: 0.05
   write_timeout_s: 0.05
@@ -8,16 +8,16 @@ thumb:
   cmc_1:
     id: 13
     range:
-    - -15
-    - 15
-    reverse: false
+    - 0.0
+    - 45.0
+    reverse: true
     enabled: true
   cmc_2:
     id: 14
     range:
-    - -30.0
-    - 90.0
-    reverse: true
+    - -90.0
+    - 30.0
+    reverse: false
     enabled: true
   mcp:
     id: 15
@@ -37,8 +37,8 @@ index:
   mcp_1:
     id: 5
     range:
-    - -45.0
-    - 10.0
+    - -8.0
+    - 0.0
     reverse: false
     enabled: true
   mcp_2:
@@ -62,8 +62,8 @@ middle:
   mcp_1:
     id: 6
     range:
-    - -10
-    - 10
+    - -15
+    - 15
     reverse: false
     enabled: true
   mcp_2:
@@ -87,8 +87,8 @@ ring:
   mcp_1:
     id: 7
     range:
-    - -10
-    - 10
+    - -15
+    - 15
     reverse: false
     enabled: true
   mcp_2:
@@ -112,8 +112,8 @@ little:
   mcp_1:
     id: 8
     range:
-    - -10
-    - 10
+    - 0
+    - 45
     reverse: false
     enabled: true
   mcp_2:
