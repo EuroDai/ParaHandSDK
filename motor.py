@@ -321,7 +321,7 @@ class Motor:
             
             # 如果缓冲区中有不完整的数据，打印调试信息
             if len(self.receive_buffer) > 0:
-                print(f"Remaining incomplete data in buffer: {' '.join(f'{b:02X}' for b in self.receive_buffer)} (Length: {len(self.receive_buffer)})")
+                pass
     
     def _send_raw(self, frame: bytes):
         """

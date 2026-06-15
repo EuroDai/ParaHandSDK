@@ -1,0 +1,390 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="para_nontendon_fr3">
+    <compiler angle="radian" />
+    <option integrator="implicitfast" />
+    <default>
+        <geom condim='4' solref=".01 1" solimp=".95 .99 .0005" contype="1" conaffinity="1"/>
+        <default class="cube">
+            <geom friction="1.0 0.1 0.002" contype="2" conaffinity="7" condim="4" />
+        </default>
+        <default class="hand">
+            <geom type="mesh" density="1250" friction="1 0.05 0.0002" rgba="0 0 1 0" />
+        </default>
+        <default class="visual">
+            <geom contype="0" conaffinity="0" group="2" density="1" />
+        </default>
+        <default class="tip">
+            <geom zaxis="1 0 0" type="capsule" size="0.008 0.006" pos="0.022 0 0" rgba="1 1 .6 1" density="1000" friction="1 0.005 0.0001" />
+        </default>
+		<default class="tac">
+            <geom zaxis="1 0 0" type="capsule" size="0.006 0.003" pos="0.026 0.006 0" rgba="0 1 0 0.3" density="1000" friction="1 0.2 0.01" />
+        </default>
+        <default class="collision">
+            <geom density="1250" friction="1.0 0.1 0.001" rgba="0.7 0.3 0.3 1" />
+            <default class="link_1_collision">
+                <geom type="box" pos="0.019235 0.00017 0" size="0.013545 0.00875 0.00599"/>
+            </default>
+            <default class="link_2_collision">
+                <geom type="box" pos="-0.0125 0 0" size="0.00341 0.0075 0.0065"/>
+            </default>
+            <default class="link_3_collision">
+                <geom type="box" pos="0.01113 0 0" size="0.003805 0.0075 0.0065"/>
+            </default>
+        </default>
+        <default class="palm_collision">
+            <geom density="1500" friction="1.0 0.1 0.001" rgba="0.3 0.3 0.7 1" />
+        </default>
+        <default class="tendon">
+            <tendon  width="0.001" rgba="0 0 1 1"/>
+			<position ctrllimited="true" forcelimited="true" forcerange="-400 0" ctrlrange="0.0037 0.0285" kp="200"/>
+            <site size="0.002" rgba="0 1 0 1" />
+        </default>
+		<default class="passive_finger_joint">
+            <joint type="hinge" range="0 1.57" limited="true" damping="4e-04" stiffness="0.003467" solreflimit="0.002 1" solimplimit="0.99 0.999 0.001"/>
+        </default>
+        <default class="thumb_joint">
+            <joint type="hinge" range="0 1.57" limited="true" frictionloss="2.0" armature="0.001" damping="4e-04" />
+            <position forcelimited="true" forcerange="-2.128 2.128" ctrllimited="true" inheritrange="1" kp="10" dampratio="1.1"/>
+        </default>
+        <default class="swing_joint">
+            <joint type="hinge" range="-0.26 0.26" limited="true" frictionloss="2.0" armature="0.001" damping="4e-04"/>
+            <position forcelimited="true" forcerange="-2.128 2.128" ctrllimited="true" inheritrange="1" kp="10" dampratio="1.1"/>
+        </default>
+        <default class="finger_joint">
+            <joint type="hinge" range="0 1.57" limited="true" frictionloss="2.0" armature="0.001" damping="4e-04" />
+            <position forcelimited="true" forcerange="-2.128 2.128" ctrllimited="true" inheritrange="1" kp="10" dampratio="1.1"/>
+        </default>
+        <default class="touch_sensor">
+            <site rgba="1 0 0 0.3" zaxis="1 0 0" size="0.006" pos="0.029 0.006 0"/>
+        </default>
+        <default class="fr3">
+            <joint type="hinge" axis="0 0 1" armature="0.1" />
+            <position ctrllimited="true" inheritrange="1" kp="2000" kv="200"/>
+        </default>
+    </default>
+    <asset>
+        <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="1 1 1" rgb2="0 0 0" markrgb="0 0 0" width="300" height="300" />
+        <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0" />
+    </asset>
+    <option gravity="0 0 -9.81" />
+    <keyframe>
+        <key name="home" 
+            qpos="-0.03 -1.57 1.47 -0.563 1.37 0.0
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0 
+                -0.50 -0.25 0.03 1 0 0 0" 
+            qvel="0 0 0 0 0 0
+                0 0 0 0 
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0
+                0 0 0 0 0 0" 
+            ctrl="-0.03 -1.57 1.47 -0.563 1.37 0.0
+                0 0 0 0 
+                0 0 0.0285
+                0 0 0.0285
+                0 0 0.0285
+                0 0 0.0285" />
+    </keyframe>
+    <worldbody>
+        <camera name="default" pos="-0.988 -1.151 0.478" xyaxes="0.813 -0.582 0.000 0.116 0.162 0.980"/>
+        <camera name="cam1" pos="-0.429 -1.169 0.358" xyaxes="0.984 -0.178 -0.000 0.028 0.154 0.988"/>
+        <camera name="cam_close" pos="-0.139 -0.614 0.217" xyaxes="0.830 0.557 -0.000 -0.218 0.324 0.921"/>
+
+
+        <geom name="floor" pos="0 0 0" size="0 0 0.01" type="plane" material="groundplane" friction="0.8 0.05 0.05" contype="32" conaffinity="4194176"/>
+        <site name="target" pos="-0.55 -0.18 0.4" size="0.002" rgba="1 0 0 1" />
+        
+        <body name="base_link" pos="0 0 0">
+            <inertial pos="-0.00049027 -0.00045095 0.032527" mass="0.78393" fullinertia="0.0013854 0.0013849 0.001977 1.1455E-05 -1.0642E-05 -9.7435E-06" />
+            <!-- <geom pos="0 0 0.0399" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.064 0.0399" group="0" contype="4" conaffinity="4193792"/> -->
+            
+            <body name="shoulder_link">
+                <joint class="fr3" name="j1" range="-3.0543 3.0543" />
+                <inertial pos="-3.8658E-07 -0.0024176 0.13519" mass="2.1225" fullinertia="0.0033227 0.0032419 0.0023129 -5.0648E-08 -6.3401E-09 4.3768E-05" />
+                <geom pos="0 0 0.13674" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.045 0.05694" group="0" contype="16" conaffinity="4193344"/>
+                <geom pos="0 -0.0269 0.14" zaxis="0 1 0" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.045 0.0269" group="0" contype="16" conaffinity="4193344"/>
+                
+                <body name="upperarm_link" pos="0 0 0.14" zaxis="0 -1 0">
+                    <joint class="fr3" name="j2" range="-4.6251 1.4835" />
+                    <inertial pos="-0.14111 3.4656E-06 0.11053" mass="4.8053" fullinertia="0.0075945 0.0081317 0.0059231 3.7143E-07 -7.9228E-12 -1.2918E-11" />
+                    <geom pos="0 0 0.11194" zaxis="0 0 1" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.045 0.05794" group="0" contype="8" conaffinity="4194048"/>
+                    <geom pos="-0.14 0 0.114" zaxis="1 0 0" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.045 0.14" group="0" contype="8" conaffinity="4194048"/>
+                    <geom pos="-0.28 0 0.11194" zaxis="0 0 1" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.045 0.05794" group="0" contype="1" conaffinity="4193280"/>
+                    
+                    <body name="forearm_link" pos="-0.28 0 0" euler="0 0 0">
+                        <joint class="fr3" name="j3" range="-2.8274 2.8274" />
+                        <inertial pos="-0.18987 5.2268E-06 0.0034145" mass="2.2312" fullinertia="0.0028852 0.0035145 0.0029186 7.3389E-07 -3.5373E-05 -2.8527E-07" />
+                        <geom name="forearm_collision_1" pos="-0.007505 0 0.0069" zaxis="0 1 0" rgba="0.89804 0.91765 0.92941 1" type="box" size="0.0525 0.047 0.045" group="0" contype="128" conaffinity="4193312"/>
+                        <geom pos="-0.1499 0 0" zaxis="1 0 0" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.04 0.0899" group="0" contype="2" conaffinity="3932672"/>
+                        <geom pos="-0.24 0 0.00182" zaxis="0 0 1" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.04 0.05118" group="0" contype="64" conaffinity="3670032"/>
+                        
+                        <body name="wrist1_link" pos="-0.24001 0 0" euler="0 0 0">
+                            <joint class="fr3" name="j4" range="-4.6251 1.4835" />
+                            <inertial pos="4.5665E-07 -0.0034666 0.098292" mass="1.5961" fullinertia="0.0020112 0.0014524 0.0019076 6.8085E-09 2.4945E-08 3.2511E-05" />
+                            <geom pos="0 0 0.07785" zaxis="0 0 1" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.04 0.0244" group="0" contype="256" conaffinity="2097192"/>
+                            <geom pos="0 -0.00291 0.102" zaxis="0 1 0" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.04 0.050275" group="0" contype="256" conaffinity="2097192"/>
+                            
+                            <body name="wrist2_link" pos="0 0 0.102" euler="1.5708 0 0">
+                                <joint class="fr3" name="j5" range="-3.0543 3.0543" />
+                                <inertial pos="-4.5262E-07 0.0034666 0.098292" mass="1.5961" fullinertia="0.0020112 0.0014524 0.0019076 6.8086E-09 -2.4945E-08 -3.2511E-05" />
+                                <geom pos="0 0 0.07785" zaxis="0 0 1" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.04 0.0244" group="0" contype="512" conaffinity="2097198"/>
+                                <geom name="wrist2_collision_2" pos="0 0.00291 0.102" zaxis="0 1 0" rgba="0.89804 0.91765 0.92941 1" type="capsule" size="0.04 0.050275" group="0" contype="512" conaffinity="2097198"/>
+                                
+                                <body name="wrist3_link" pos="0 0 0.102" euler="-1.5708 0 0">
+                                    <joint class="fr3" name="j6" range="-3.0543 3.0543" />
+                                    <inertial pos="7.559E-05 1.3858E-05 0.076619" mass="0.53877" fullinertia="0.00028785 0.00028896 0.00042655 -2.0584E-09 -1.3892E-07 1.8115E-07" />
+                                    <geom pos="0 0 0.0736" zaxis="0 0 1" rgba="0.94118 0.52941 0.18824 1" type="capsule" size="0.04 0.0204" group="0" />
+                                    
+                                        <body name="palm" pos="0 0 0.1" euler="0 0 0" childclass="hand">
+                                        <site name="test" size="0.002" rgba="0 0 1 1" />
+                                            <site name="inner_palm_5" pos="-0.00249 -0.021 0.1" size="0.002" rgba="0 0 1 1" />
+                                            <geom name="palm_collision_1" type="box" pos="-0.00249 0.00075 0.1" size="0.045 0.02175 0.04" class="palm_collision" contype="262144" conaffinity="2097343"/>
+                                            <body name="thumb_link_0" pos="0.01905 0 0.05851" euler="3.14 1.57 0">
+                                                <joint name="thumb_joint_0" type="hinge" axis="0 1 0" class="thumb_joint" range="0 0.785"/>
+                                                <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                <body name="thumb_link_1" pos="0 0.01489 0.011500" euler="-1.57 0 0">
+                                                    <joint name="thumb_joint_1" type="hinge" axis="-1 0 0" class="thumb_joint" range="-1.57 0.785"/>
+                                                    <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                    <body name="thumb_link_2" pos="0 0 0.022500" euler="-1.57 0 -1.57">
+                                                        <joint name="thumb_joint_2" type="hinge" axis="0 0 1" class="thumb_joint" range="-0.611 1.57"/>
+                                                        <geom name="thumb_link_2_collision" type="box" pos="0.0225 0 0.00075" size="0.013795 0.00471 0.00485" class="collision" contype="524288" conaffinity="2343167"/>
+                                                        <body name="thumb_link_3" pos="0.04970 0 0" euler="0 0 -3.14">
+                                                            <joint name="thumb_joint_3" type="hinge" axis="0 0 1" class="thumb_joint"/>
+                                                            <geom name="thumb_link_3_collision" type="box" pos="-0.0227 0 0" size="0.014 0.005 0.006" class="collision" contype="1048576" conaffinity="2357503"/>
+                                                            <geom name="thumb_tip" pos="-0.0442 0.003 0" class="tip" contype="1048576" conaffinity="2357503"/>
+                                                            <site name="thumb_tip" pos="-0.0502 -0.003 0" class="touch_sensor"/>
+                                                            <geom name="thumb_tac" pos="-0.0472 -0.003 0" class="tac" contype="1048576" conaffinity="2357503"/>
+                                                        </body>
+                                                    </body>
+                                                </body>
+                                            </body>
+                                            <body name="index_link_0" pos="0.03040 0 0.14156" euler="1.57 0 3.14">
+                                                <joint name="index_swing" axis="0 0 1." class="swing_joint" range="-0.52 0"/>
+                                                <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                <body name="index_link_1" pos="0 -0.0225000 0.014000" euler="1.57 -1.57 0">
+                                                    <joint name="index_joint_0" axis="0 0 1" class="finger_joint" />
+                                                    <site name="index_tendon_1" pos="0.0345 0.008 0.0" class="tendon"/>
+                                                    <geom name="index_link_1_collision" class="link_1_collision" contype="2048" conaffinity="3285181"/>
+                                                    <body name="index_link_2" pos="0.04166 -0.00102 0" euler="-3.14 0 -3.14">
+                                                        <inertial pos="0 0 0" mass="0.005" fullinertia="1.89e-7 9.93e-7 9.81e-7 7.1e-8 0 0"/>
+                                                        <joint name="index_joint_1" axis="0 0 -1" class="passive_finger_joint" />
+                                                        <site name="index_tendon_2" pos="-0.007 0.006 0.0" class="tendon"/>
+                                                        <site name="index_tendon_3" pos="-0.0155 0.006 0.0" class="tendon"/>
+                                                        <geom name="index_link_2_collision" class="link_2_collision" contype="2048" conaffinity="3285181"/>
+                                                        <body name="index_link_3" pos="-0.0225 0 0" euler="-3.14 0 3.14">
+                                                            <inertial pos="0 0 0" mass="0.005" fullinertia="1.93e-7 1.736e-6 1.707e-6 -1.9e-7 0 0"/>
+                                                            <joint name="index_joint_2" axis="0 0 1" class="passive_finger_joint" />
+                                                            <site name="index_tendon_4" pos="0.007 0.006 0.0" class="tendon"/>
+                                                            <geom name="index_link_3_collision" class="link_3_collision" contype="32768" conaffinity="3875005"/>
+                                                            <geom name="index_tip" class="tip" contype="32768" conaffinity="3875005"/>
+                                                            <site name="index_tip" class="touch_sensor" />
+                                                            <geom name="index_tac" class="tac" contype="32768" conaffinity="3875005"/>
+                                                        </body>
+                                                    </body>
+                                                </body>
+                                            </body>
+                                            <body name="middle_link_0" pos="0.00710 0 0.14306" euler="1.57 0 3.14">
+                                                <joint name="middle_swing" axis="0 0 1" class="swing_joint"/>
+                                                <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                <body name="middle_link_1" pos="0 -0.0225000 0.014000" euler="1.57 -1.57 0">
+                                                    <joint name="middle_joint_0" axis="0 0 1" class="finger_joint" />
+                                                    <site name="middle_tendon_1" pos="0.0345 0.008 0.0" class="tendon"/>
+                                                    <geom name="middle_link_1_collision" class="link_1_collision" contype="8192" conaffinity="3250365"/>
+                                                    <body name="middle_link_2" pos="0.04166 -0.00102 0" euler="-3.14 0 -3.14">
+                                                        <inertial pos="0 0 0" mass="0.005" fullinertia="1.89e-7 9.93e-7 9.81e-7 7.1e-8 0 0"/>
+                                                        <joint name="middle_joint_1" axis="0 0 -1" class="passive_finger_joint"/>
+                                                        <site name="middle_tendon_2" pos="-0.007 0.006 0.0" class="tendon"/>
+                                                        <site name="middle_tendon_3" pos="-0.0205 0.006 0.0" class="tendon"/>
+                                                        <geom name="middle_link_2_collision" class="link_2_collision" pos="-0.01388 0 0" size="0.00591 0.0075 0.0065" contype="2048" conaffinity="3285181"/>
+                                                        <body name="middle_link_3" pos="-0.0275 0 0" euler="-3.14 0 3.14">
+                                                            <inertial pos="0 0 0" mass="0.005" fullinertia="1.93e-7 1.736e-6 1.707e-6 -1.9e-7 0 0"/>
+                                                            <joint name="middle_joint_2" axis="0 0 1" class="passive_finger_joint" />
+                                                            <site name="middle_tendon_4" pos="0.007 0.006 0.0" class="tendon"/>
+                                                            <geom name="middle_link_3_collision" class="link_3_collision" contype="131072" conaffinity="3791037"/>
+                                                            <geom name="middle_tip" class="tip" contype="131072" conaffinity="3791037"/>
+                                                            <site name="middle_tip" class="touch_sensor" />
+                                                            <geom name="middle_tac" class="tac" contype="131072" conaffinity="3791037"/>
+                                                        </body>
+                                                    </body>
+                                                </body>
+                                            </body>
+                                            <body name="ring_link_0" pos="-0.0162 0 0.14056" euler="1.57 0 3.14">
+                                                <joint name="ring_swing" axis="0 0 1" class="swing_joint" />
+                                                <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                <body name="ring_link_1" pos="0 -0.0225000 0.014000" euler="1.57 -1.57 0">
+                                                    <joint name="ring_joint_0" axis="0 0 1" class="finger_joint" />
+                                                    <site name="ring_tendon_1" pos="0.0345 0.008 0.0" class="tendon"/>
+                                                    <geom name="ring_link_1_collision" class="link_1_collision" contype="4096" conaffinity="3302589"/>
+                                                    <body name="ring_link_2" pos="0.04166 -0.00102 0" euler="-3.14 0 -3.14">
+                                                        <inertial pos="0 0 0" mass="0.005" fullinertia="1.89e-7 9.93e-7 9.81e-7 7.1e-8 0 0"/>
+                                                        <joint name="ring_joint_1" axis="0 0 -1" class="passive_finger_joint" />
+                                                        <site name="ring_tendon_2" pos="-0.007 0.006 0.0" class="tendon"/>
+                                                        <site name="ring_tendon_3" pos="-0.0155 0.006 0.0" class="tendon"/>
+                                                        <geom name="ring_link_2_collision" class="link_2_collision" contype="4096" conaffinity="3302589"/>
+                                                        <body name="ring_link_3" pos="-0.0225 0 0" euler="-3.14 0 3.14">
+                                                            <inertial pos="0 0 0" mass="0.005" fullinertia="1.93e-7 1.736e-6 1.707e-6 -1.9e-7 0 0"/>
+                                                            <joint name="ring_joint_2" axis="0 0 1" class="passive_finger_joint" />
+                                                            <site name="ring_tendon_4" pos="0.007 0.006 0.0" class="tendon"/>
+                                                            <geom name="ring_link_3_collision" class="link_3_collision" contype="65536" conaffinity="3859645"/>
+                                                            <geom name="ring_tip" class="tip" contype="65536" conaffinity="3859645"/>
+                                                            <site name="ring_tip" class="touch_sensor" />
+                                                            <geom name="ring_tac" class="tac" contype="65536" conaffinity="3859645"/>
+                                                        </body>
+                                                    </body>
+                                                </body>
+                                            </body>
+                                            <body name="little_link_0" pos="-0.0393 0 0.13806" euler="1.57 0 3.14">
+                                                <joint name="little_swing" axis="0 0 1" class="swing_joint" range="0 0.52"/>
+                                                <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
+                                                <body name="little_link_1" pos="0 -0.0225000 0.014000" euler="1.57 -1.57 0">
+                                                    <joint name="little_joint_0" axis="0 0 1" class="finger_joint" />
+                                                    <site name="little_tendon_1" pos="0.0345 0.008 0.0" class="tendon"/>
+                                                    <geom name="little_link_1_collision" class="link_1_collision" contype="1024" conaffinity="2166973"/>
+                                                    <body name="little_link_2" pos="0.04166 -0.00102 0" euler="-3.14 0 -3.14">
+                                                        <inertial pos="0 0 0" mass="0.005" fullinertia="1.89e-7 9.93e-7 9.81e-7 7.1e-8 0 0"/>
+                                                        <joint name="little_joint_1" axis="0 0 -1" class="passive_finger_joint" />
+                                                        <site name="little_tendon_2" pos="-0.007 0.006 0.0" class="tendon"/>
+                                                        <site name="little_tendon_3" pos="-0.0155 0.006 0.0" class="tendon"/>
+                                                        <geom name="little_link_2_collision" class="link_2_collision" contype="1024" conaffinity="2166973"/>
+                                                        <body name="little_link_3" pos="-0.0225 0 0" euler="-3.14 0 3.14">
+                                                            <inertial pos="0 0 0" mass="0.005" fullinertia="1.93e-7 1.736e-6 1.707e-6 -1.9e-7 0 0"/>
+                                                            <joint name="little_joint_2" axis="0 0 1" class="passive_finger_joint" />
+                                                            <site name="little_tendon_4" pos="0.007 0.006 0.0" class="tendon"/>
+                                                            <geom name="little_link_3_collision" class="link_3_collision" contype="16384" conaffinity="3870909"/>
+                                                            <geom name="little_tip" class="tip" contype="16384" conaffinity="3870909"/>
+                                                            <site name="little_tip" class="touch_sensor" />
+                                                            <geom name="little_tac" class="tac" contype="16384" conaffinity="3870909"/>
+                                                        </body>
+                                                    </body>
+                                                </body>
+                                            </body>
+                                        </body>
+                                    
+                                </body>
+                            </body>
+                        </body>
+                    </body>
+                </body>
+            </body>
+        </body>
+        <body name="cube" pos="-0.5 -0.25 0.03" quat="0 0 0 1" childclass="cube">
+            <freejoint name="cube_freejoint" />
+            <!-- <geom name="cube" type="capsule" zaxis="0 1 0" size="0.03 0.03" rgba="0 1 0 1" density="500" condim="4" solref="0.02 1" solimp="0.95 0.99 0.001" contype="2097152" conaffinity="2097151"/> -->
+            <geom name="cube" type="box" pos="0 0 0" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" condim="4" solref="0.02 1" contype="2097152" conaffinity="2097151"/>
+            <site name="cube_center" pos="0 0 0" group="4" />
+        </body>
+    </worldbody>
+    <contact>
+        <!-- Prevent palm self-collision with the proximal finger links. -->
+        <exclude body1="palm" body2="thumb_link_1"/>
+        <exclude body1="thumb_link_1" body2="thumb_link_2"/>
+        <exclude body1="thumb_link_2" body2="thumb_link_3"/>
+        <exclude body1="palm" body2="index_link_1"/>
+        <exclude body1="index_link_1" body2="index_link_2"/>
+        <exclude body1="index_link_2" body2="index_link_3"/>
+        <exclude body1="palm" body2="middle_link_1"/>
+        <exclude body1="middle_link_1" body2="middle_link_2"/>
+        <exclude body1="middle_link_2" body2="middle_link_3"/>
+        <exclude body1="palm" body2="ring_link_1"/>
+        <exclude body1="ring_link_1" body2="ring_link_2"/>
+        <exclude body1="ring_link_2" body2="ring_link_3"/>
+        <exclude body1="palm" body2="little_link_1"/>
+        <exclude body1="little_link_1" body2="little_link_2"/>
+        <exclude body1="little_link_2" body2="little_link_3"/>
+        <exclude body1="base_link" body2="shoulder_link"/>
+        <exclude body1="base_link" body2="upperarm_link"/>
+        <exclude body1="shoulder_link" body2="upperarm_link"/>
+        <exclude body1="upperarm_link" body2="forearm_link"/>
+        <exclude body1="forearm_link" body2="wrist1_link"/>
+        <exclude body1="forearm_link" body2="wrist2_link"/>
+        <exclude body1="wrist1_link" body2="wrist2_link"/>
+        <exclude body1="wrist2_link" body2="wrist3_link"/>
+        <exclude body1="wrist3_link" body2="wrist1_link"/>
+        <exclude body1="wrist1_link" body2="palm"/>
+        <exclude body1="wrist2_link" body2="palm"/>
+        <exclude body1="wrist3_link" body2="palm"/>
+    </contact>
+    <tendon>
+        <spatial name="index_tendon" class="tendon">
+            <site site="index_tendon_1"/>
+            <site site="index_tendon_2"/>
+			<pulley divisor="1"/>
+            <site site="index_tendon_3"/>
+            <site site="index_tendon_4"/>
+        </spatial>
+        <spatial name="middle_tendon" class="tendon">
+            <site site="middle_tendon_1"/>
+            <site site="middle_tendon_2"/>
+			
+			<pulley divisor="1"/>
+            <site site="middle_tendon_3"/>
+            <site site="middle_tendon_4"/>
+        </spatial>
+        <spatial name="ring_tendon" class="tendon">
+            <site site="ring_tendon_1"/>
+            <site site="ring_tendon_2"/>
+			<pulley divisor="1"/>
+            <site site="ring_tendon_3"/>
+            <site site="ring_tendon_4"/>
+        </spatial>
+        <spatial name="little_tendon" class="tendon">
+            <site site="little_tendon_1"/>
+            <site site="little_tendon_2"/>
+			<pulley divisor="1"/>
+            <site site="little_tendon_3"/>
+            <site site="little_tendon_4"/>
+        </spatial>
+    </tendon>
+    <actuator>
+        <position class="fr3" name="j1" joint="j1"/>
+        <position class="fr3" name="j2" joint="j2"/>
+        <position class="fr3" name="j3" joint="j3"/>
+        <position class="fr3" name="j4" joint="j4"/>
+        <position class="fr3" name="j5" joint="j5"/>
+        <position class="fr3" name="j6" joint="j6"/>
+        <position class="thumb_joint" name="thumb_joint_0" joint="thumb_joint_0"/>
+        <position class="thumb_joint" name="thumb_joint_1" joint="thumb_joint_1"/>
+        <position class="thumb_joint" name="thumb_joint_2" joint="thumb_joint_2"/>
+        <position class="thumb_joint" name="thumb_joint_3" joint="thumb_joint_3"/>
+        <position class="swing_joint" name="index_swing" joint="index_swing"/>
+        <position class="finger_joint" name="index_joint_0" joint="index_joint_0"/>
+        <position class="tendon" name="index_tendon" tendon="index_tendon"/>
+
+        <position class="swing_joint" name="middle_swing" joint="middle_swing"/>
+        <position class="finger_joint" name="middle_joint_0" joint="middle_joint_0"/>
+        <position class="tendon" name="middle_tendon" tendon="middle_tendon"/>
+
+        <position class="swing_joint" name="ring_swing" joint="ring_swing"/>
+        <position class="finger_joint" name="ring_joint_0" joint="ring_joint_0"/>
+        <position class="tendon" name="ring_tendon" tendon="ring_tendon"/>
+        
+        <position class="swing_joint" name="little_swing" joint="little_swing"/>
+        <position class="finger_joint" name="little_joint_0" joint="little_joint_0"/>
+        <position class="tendon" name="little_tendon" tendon="little_tendon"/>
+
+    </actuator>
+    <sensor>
+        <framepos name="cube_pos" objtype="body" objname="cube" />
+        <framequat name="cube_quat" objtype="body" objname="cube" />
+        <framelinvel name="cube_linvel" objtype="body" objname="cube" />
+        <frameangvel name="cube_angvel" objtype="body" objname="cube" />
+        <frameangacc name="cube_angacc" objtype="body" objname="cube" />
+        <framezaxis name="cube_upvector" objtype="body" objname="cube" />
+        <framepos name="palm_pos" objtype="site" objname="inner_palm_5" />
+        <framepos name="thumb_fingertip_pos" objtype="site" objname="thumb_tip" />
+        <framepos name="index_fingertip_pos" objtype="site" objname="index_tip" />
+        <framepos name="middle_fingertip_pos" objtype="site" objname="middle_tip" />
+        <framepos name="ring_fingertip_pos" objtype="site" objname="ring_tip" />
+        <framepos name="little_fingertip_pos" objtype="site" objname="little_tip" />
+        <touch name="thumb_touch" site="thumb_tip" />
+        <touch name="index_touch" site="index_tip" />
+        <touch name="middle_touch" site="middle_tip" />
+        <touch name="ring_touch" site="ring_tip" />
+        <touch name="little_touch" site="little_tip" />
+	</sensor>
+</mujoco>

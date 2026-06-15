@@ -670,7 +670,7 @@ class MainWindow(QMainWindow):
         self.connect_button = QPushButton("连接")
         self.disconnect_button = QPushButton("断开")
         self.enable_checkbox = QCheckBox("全局使能")
-        self.zero_button = QPushButton("置零")
+        self.zero_button = QPushButton("所有电机回零")
         self.mode_label = QLabel("控制模式")
         self.control_mode_combo = QComboBox()
         self.control_mode_combo.addItem("电机模式", self.MOTOR_MODE)
@@ -775,6 +775,7 @@ class MainWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.addWidget(self.connection_config_toggle_button)
+        header_layout.addWidget(self.zero_button)
         header_layout.addStretch()
         self.connection_config_header_widget.setLayout(header_layout)
 
@@ -837,6 +838,7 @@ class MainWindow(QMainWindow):
         self.enable_checkbox.toggled.connect(self._toggle_enable)
         self.control_mode_combo.currentIndexChanged.connect(self._on_control_mode_changed)
         self.connection_config_toggle_button.toggled.connect(self._toggle_connection_config_panel)
+        self.zero_button.clicked.connect(self._zero_all_motors)
         self.ctrl_frequency_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.port_input.textChanged.connect(self._mark_connection_config_dirty)
         self.baudrate_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
@@ -1199,6 +1201,7 @@ class MainWindow(QMainWindow):
         self.connect_button.setEnabled(not connected)
         self.disconnect_button.setEnabled(connected)
         self.enable_checkbox.setEnabled(connected)
+        self.zero_button.setEnabled(connected)
         self._set_connection_config_editable(not connected)
         for row in self.row_widgets.values():
             row.set_motion_enabled(connected)
@@ -1266,8 +1269,28 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "使能失败", str(exc))
             self._set_status(f"使能失败: {exc}")
 
-    def _show_zero_placeholder(self):
-        QMessageBox.information(self, "置零", "调零请使用每个关节详情中的 -/+ 按钮。")
+    def _zero_all_motors(self):
+        if not self.hand.connected:
+            self._set_status("请先连接设备")
+            return
+
+        targets_deg = {
+            joint_name: 0.0
+            for joint_name, definition in self.hand.joint_to_motor.items()
+            if definition.enabled
+        }
+        if not targets_deg:
+            self._set_status("没有已启用的电机可回零")
+            return
+
+        try:
+            resolved_targets = self.hand.resolve_joint_targets(targets_deg)
+            self.hand._dispatch_joint_positions(resolved_targets)
+            self._apply_resolved_joint_targets_to_gui(resolved_targets)
+            self._set_status(f"已发送所有电机回零，共 {len(resolved_targets)} 个关节")
+        except Exception as exc:
+            QMessageBox.critical(self, "所有电机回零失败", str(exc))
+            self._set_status(f"所有电机回零失败: {exc}")
 
     def _set_joint_enabled(self, joint_name: str, enabled: bool):
         previous_definition = self.hand.joint_to_motor.get(joint_name)

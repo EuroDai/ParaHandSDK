@@ -194,6 +194,21 @@ class ParaHand:
 
         return self.set_joint_positions(targets_deg, speed_input)
 
+    def set_hand_positions_broadcast(self, positions: Iterable[float]) -> str:
+        targets_deg = self._coerce_hand_positions_to_joint_targets_deg(positions)
+        return self.set_joint_positions_broadcast(targets_deg)
+
+    def set_joint_positions_broadcast(self, targets_deg: Dict[str, float]) -> str:
+        resolved_targets = self.resolve_joint_targets(targets_deg)
+        motor_targets_deg: Dict[int, float] = {}
+        for joint_name, angle_deg in resolved_targets.items():
+            definition = self._get_joint_definition(joint_name)
+            if definition.enabled:
+                motor_targets_deg[definition.motor_id] = self._to_motor_angle(definition, angle_deg)
+        if not motor_targets_deg:
+            return ""
+        return self.motor.set_motor_angles_broadcast(motor_targets_deg)
+
     def _coerce_hand_positions_to_joint_targets_deg(self, positions: Iterable[float]) -> Dict[str, float]:
         joint_names = self.get_hand_joint_order()
         if not joint_names:
@@ -294,6 +309,18 @@ class ParaHand:
 
         target_angle = self._to_known_motor_angle(motor_id, angle_deg)
         return self.motor.set_motor_angle(motor_id, math.radians(target_angle), speed=speed_ratio)
+
+    def set_tendon_motor_speeds_broadcast(self, speed: Any = 100.0, default_speed: Any = 50.0) -> str:
+        speed_percent = self._normalize_speed_value(speed) * 100.0
+        default_speed_percent = self._normalize_speed_value(default_speed) * 100.0
+        motor_speeds = {
+            definition.motor_id: speed_percent if self.is_pip_dip_joint(joint_name) else default_speed_percent
+            for joint_name, definition in self.joint_to_motor.items()
+            if definition.enabled
+        }
+        if not motor_speeds:
+            return ""
+        return self.motor.set_motor_speeds_broadcast(motor_speeds)
 
     def jog_joint(self, joint_name: str, direction: int) -> str:
         '''按关节定义执行点动控制。'''
