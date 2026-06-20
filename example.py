@@ -8,7 +8,7 @@ from parahand import ParaHand
 
 
 def main() -> int:
-    config_path = Path(__file__).with_name("config.yaml")
+    config_path = Path(__file__).with_name("config_hand.yaml")
     hand = ParaHand(str(config_path))
 
     print(f"使用配置: {hand.config_path}")

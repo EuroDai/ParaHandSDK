@@ -694,7 +694,7 @@ class MainWindow(QMainWindow):
         self.save_connection_config_button = QPushButton("保存控制器配置")
         self.connection_config_status_label = QLabel("已载入")
 
-        self.empty_label = QLabel("config.yaml 中还没有有效的 joint 配置，请先填写 id / range / reverse。")
+        self.empty_label = QLabel("config_hand.yaml 中还没有有效的 joint 配置，请先填写 id / range / reverse。")
         self.scroll_area = QScrollArea()
         self.rows_container = QWidget()
         self.rows_layout = QVBoxLayout()

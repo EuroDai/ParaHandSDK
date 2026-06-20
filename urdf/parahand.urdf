@@ -1,0 +1,1286 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="to_urdf_defeature.SLDASM">
+  <link
+    name="palm">
+    <inertial>
+      <origin
+        xyz="-0.046527 -0.0023976 0.00061146"
+        rpy="0 0 0" />
+      <mass
+        value="0.16303" />
+      <inertia
+        ixx="9.8769E-05"
+        ixy="-2.4749E-05"
+        ixz="3.817E-06"
+        iyy="0.00043847"
+        iyz="-4.0338E-07"
+        izz="0.0004104" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/palm.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/palm.STL" />
+      </geometry>
+    </collision>
+	  </link>
+  <!-- Retargeting reference frame. Tune this fixed joint's xyz/rpy to calibrate the hand frame. -->
+  <link
+    name="retarget_origin" />
+  <joint
+    name="retarget_origin_joint"
+    type="fixed">
+    <origin
+      xyz="-0.02 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="palm" />
+    <child
+      link="retarget_origin" />
+  </joint>
+	  <link
+	    name="thumb_mc_1">
+    <inertial>
+      <origin
+        xyz="-0.00017859 -0.0004247 0.0094313"
+        rpy="0 0 0" />
+      <mass
+        value="0.0052426" />
+      <inertia
+        ixx="1.4068E-07"
+        ixy="-6.2233E-09"
+        ixz="4.7635E-08"
+        iyy="6.9712E-07"
+        iyz="-2.254E-09"
+        izz="6.7859E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_mc_1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_mc_1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="thumb_cmc_1"
+    type="revolute">
+    <origin
+      xyz="-0.058514 -0.001 0.019053"
+      rpy="1.5708 1.5708 0" />
+    <parent
+      link="palm" />
+    <child
+      link="thumb_mc_1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0" 
+      upper="0.523"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="thumb_mc_2">
+    <inertial>
+      <origin
+        xyz="-0.01125 9.3432E-15 1.1796E-15"
+        rpy="0 0 0" />
+      <mass
+        value="0.0018741" />
+      <inertia
+        ixx="9.492E-08"
+        ixy="2.3719E-20"
+        ixz="-3.9174E-23"
+        iyy="8.89E-08"
+        iyz="5.7573E-21"
+        izz="8.89E-08" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_mc_2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_mc_2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="thumb_cmc_2"
+    type="revolute">
+    <origin
+      xyz="-0.0117 -0.00025 0.013888"
+      rpy="1.5708 1.5708 0" />
+    <parent
+      link="thumb_mc_1" />
+    <child
+      link="thumb_mc_2" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-1.57"
+      upper="0.785"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="thumb_pp">
+    <inertial>
+      <origin
+        xyz="-0.019645 -0.0020746 3.6642E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.0092115" />
+      <inertia
+        ixx="3.2961E-07"
+        ixy="7.4233E-08"
+        ixz="2.0598E-08"
+        iyy="1.9619E-06"
+        iyz="-6.4653E-09"
+        izz="1.973E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_pp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_pp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="thumb_mcp"
+    type="revolute">
+    <origin
+      xyz="-0.0225 0 0"
+      rpy="1.5708 0 0" />
+    <parent
+      link="thumb_mc_2" />
+    <child
+      link="thumb_pp" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.611"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="thumb_dp">
+    <inertial>
+      <origin
+        xyz="-0.022225 0.0032694 -4.2477E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.010227" />
+      <inertia
+        ixx="3.8926E-07"
+        ixy="1.6067E-07"
+        ixz="-2.9829E-08"
+        iyy="2.9581E-06"
+        iyz="-4.6713E-09"
+        izz="2.9752E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_dp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/thumb_dp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="thumb_ip"
+    type="revolute">
+    <origin
+      xyz="-0.0497 0 0.00025"
+      rpy="3.1416 0 0" />
+    <parent
+      link="thumb_pp" />
+    <child
+      link="thumb_dp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+	  </joint>
+  <link
+    name="thumb_tip" />
+  <joint
+    name="thumb_tip_joint"
+    type="fixed">
+    <origin
+      xyz="-0.044 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="thumb_dp" />
+    <child
+      link="thumb_tip" />
+  </joint>
+	  <link
+	    name="index_mc">
+    <inertial>
+      <origin
+        xyz="-0.0103241771367821 9.15933995315754E-16 -0.000791722501262714"
+        rpy="0 0 0" />
+      <mass
+        value="0.00283852789231508" />
+      <inertia
+        ixx="2.23772120312403E-07"
+        ixy="2.14782849321041E-21"
+        ixz="-7.3812678539261E-09"
+        iyy="2.32756763995681E-07"
+        iyz="2.04254936468194E-21"
+        izz="1.93402068798812E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_mc.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_mc.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="index_mcp_1"
+    type="revolute">
+    <origin
+      xyz="-0.14156 -0.007 0.030402"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="palm" />
+    <child
+      link="index_mc" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.52"
+      upper="0"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="index_pp">
+    <inertial>
+      <origin
+        xyz="-0.017901 0.0009138 0.023476"
+        rpy="0 0 0" />
+      <mass
+        value="0.012074" />
+      <inertia
+        ixx="5.5072E-07"
+        ixy="2.6894E-09"
+        ixz="-2.6331E-08"
+        iyy="2.2957E-06"
+        iyz="-9.4189E-09"
+        izz="2.4182E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_pp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_pp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="index_mcp_2"
+    type="revolute">
+    <origin
+      xyz="-0.024 0.023562 -0.007"
+      rpy="1.5708 0 0" />
+    <parent
+      link="index_mc" />
+    <child
+      link="index_pp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="index_mp">
+    <inertial>
+      <origin
+        xyz="-0.012962 0.0010742 1.1552E-10"
+        rpy="0 0 0" />
+      <mass
+        value="0.004828" />
+      <inertia
+        ixx="1.7435E-07"
+        ixy="4.0164E-09"
+        ixz="-4.153E-17"
+        iyy="3.3086E-07"
+        iyz="2.4773E-15"
+        izz="3.0342E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_mp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_mp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="index_pip"
+    type="revolute">
+    <origin
+      xyz="-0.042705 0.001078 0.0233"
+      rpy="0 0 0" />
+    <parent
+      link="index_pp" />
+    <child
+      link="index_mp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="index_dp">
+    <inertial>
+      <origin
+        xyz="-0.01557 0.0019537 -1.4115E-09"
+        rpy="0 0 0" />
+      <mass
+        value="0.0053289" />
+      <inertia
+        ixx="1.8806E-07"
+        ixy="4.8528E-08"
+        ixz="1.9709E-14"
+        iyy="5.8246E-07"
+        iyz="-5.8428E-14"
+        izz="5.4114E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_dp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/index_dp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="index_dip"
+    type="revolute">
+    <origin
+      xyz="-0.025 -1.5152E-05 0"
+      rpy="0 0 0" />
+    <parent
+      link="index_mp" />
+    <child
+      link="index_dp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+	  </joint>
+  <link
+    name="index_tip" />
+  <joint
+    name="index_tip_joint"
+    type="fixed">
+    <origin
+      xyz="-0.025 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="index_dp" />
+    <child
+      link="index_tip" />
+  </joint>
+	  <link
+	    name="middle_mc">
+    <inertial>
+      <origin
+        xyz="-0.010324 -1.0625E-15 -0.00079172"
+        rpy="0 0 0" />
+      <mass
+        value="0.0028385" />
+      <inertia
+        ixx="2.2377E-07"
+        ixy="-3.1367E-21"
+        ixz="-7.3813E-09"
+        iyy="2.3276E-07"
+        iyz="-3.3394E-21"
+        izz="1.934E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_mc.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_mc.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="middle_mcp_1"
+    type="revolute">
+    <origin
+      xyz="-0.14306 -0.007 0.0071023"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="palm" />
+    <child
+      link="middle_mc" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.26"
+      upper="0.26"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="middle_pp">
+    <inertial>
+      <origin
+        xyz="-0.019401 0.0009138 0.00017607"
+        rpy="0 0 0" />
+      <mass
+        value="0.012074" />
+      <inertia
+        ixx="5.5072E-07"
+        ixy="2.6894E-09"
+        ixz="-2.6331E-08"
+        iyy="2.2957E-06"
+        iyz="-9.4189E-09"
+        izz="2.4182E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_pp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_pp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="middle_mcp_2"
+    type="revolute">
+    <origin
+      xyz="-0.0225 0.00026175 -0.007"
+      rpy="1.5708 0 0" />
+    <parent
+      link="middle_mc" />
+    <child
+      link="middle_pp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="middle_mp">
+    <inertial>
+      <origin
+        xyz="-0.015444 0.00085794 1.3592E-10"
+        rpy="0 0 0" />
+      <mass
+        value="0.0060146" />
+      <inertia
+        ixx="2.2214E-07"
+        ixy="5.3832E-09"
+        ixz="1.8794E-16"
+        iyy="5.265E-07"
+        iyz="3.4544E-15"
+        izz="4.972E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_mp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_mp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="middle_pip"
+    type="revolute">
+    <origin
+      xyz="-0.044205 0.001078 0"
+      rpy="0 0 0" />
+    <parent
+      link="middle_pp" />
+    <child
+      link="middle_mp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="middle_dp">
+    <inertial>
+      <origin
+        xyz="-0.01557 0.0019537 -1.4115E-09"
+        rpy="0 0 0" />
+      <mass
+        value="0.0053289" />
+      <inertia
+        ixx="1.8806E-07"
+        ixy="4.8528E-08"
+        ixz="1.9709E-14"
+        iyy="5.8246E-07"
+        iyz="-5.8428E-14"
+        izz="5.4114E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_dp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/middle_dp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="middle_dip"
+    type="revolute">
+    <origin
+      xyz="-0.03 -1.5152E-05 0"
+      rpy="0 0 0" />
+    <parent
+      link="middle_mp" />
+    <child
+      link="middle_dp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+	  </joint>
+  <link
+    name="middle_tip" />
+  <joint
+    name="middle_tip_joint"
+    type="fixed">
+    <origin
+      xyz="-0.030 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="middle_dp" />
+    <child
+      link="middle_tip" />
+  </joint>
+	  <link
+	    name="ring_mc">
+    <inertial>
+      <origin
+        xyz="-0.010324 -1.0408E-15 -0.00079172"
+        rpy="0 0 0" />
+      <mass
+        value="0.0028385" />
+      <inertia
+        ixx="2.2377E-07"
+        ixy="-3.2484E-21"
+        ixz="-7.3813E-09"
+        iyy="2.3276E-07"
+        iyz="-3.3762E-21"
+        izz="1.934E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_mc.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_mc.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="ring_mcp_1"
+    type="revolute">
+    <origin
+      xyz="-0.14056 -0.007 -0.016198"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="palm" />
+    <child
+      link="ring_mc" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="-0.26"
+      upper="0.26"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="ring_pp">
+    <inertial>
+      <origin
+        xyz="-0.019401 0.0009138 0.00015256"
+        rpy="0 0 0" />
+      <mass
+        value="0.012074" />
+      <inertia
+        ixx="5.5072E-07"
+        ixy="2.6894E-09"
+        ixz="-2.6331E-08"
+        iyy="2.2957E-06"
+        iyz="-9.4189E-09"
+        izz="2.4182E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_pp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_pp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="ring_mcp_2"
+    type="revolute">
+    <origin
+      xyz="-0.0225 0.00023825 -0.007"
+      rpy="1.5708 0 0" />
+    <parent
+      link="ring_mc" />
+    <child
+      link="ring_pp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="ring_mp">
+    <inertial>
+      <origin
+        xyz="-0.0129617850006223 0.0010741689201514 1.15521120447326E-10"
+        rpy="0 0 0" />
+      <mass
+        value="0.00482796276747188" />
+      <inertia
+        ixx="1.74351699305521E-07"
+        ixy="4.01644227435328E-09"
+        ixz="-4.15301478733925E-17"
+        iyy="3.30856214381557E-07"
+        iyz="2.47733296941274E-15"
+        izz="3.03416305162693E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_mp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_mp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="ring_pip"
+    type="revolute">
+    <origin
+      xyz="-0.044205 0.001078 0"
+      rpy="0 0 0" />
+    <parent
+      link="ring_pp" />
+    <child
+      link="ring_mp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="ring_dp">
+    <inertial>
+      <origin
+        xyz="-0.01557 0.0019537 -1.4115E-09"
+        rpy="0 0 0" />
+      <mass
+        value="0.0053289" />
+      <inertia
+        ixx="1.8806E-07"
+        ixy="4.8528E-08"
+        ixz="1.9709E-14"
+        iyy="5.8246E-07"
+        iyz="-5.8428E-14"
+        izz="5.4114E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_dp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/ring_dp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="ring_dip"
+    type="revolute">
+    <origin
+      xyz="-0.025 -1.5152E-05 0"
+      rpy="0 0 0" />
+    <parent
+      link="ring_mp" />
+    <child
+      link="ring_dp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+	  </joint>
+  <link
+    name="ring_tip" />
+  <joint
+    name="ring_tip_joint"
+    type="fixed">
+    <origin
+      xyz="-0.025 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="ring_dp" />
+    <child
+      link="ring_tip" />
+  </joint>
+	  <link
+	    name="little_mc">
+    <inertial>
+      <origin
+        xyz="-0.010324 -1.0339E-15 -0.00079172"
+        rpy="0 0 0" />
+      <mass
+        value="0.0028385" />
+      <inertia
+        ixx="2.2377E-07"
+        ixy="-3.131E-21"
+        ixz="-7.3813E-09"
+        iyy="2.3276E-07"
+        iyz="-3.4414E-21"
+        izz="1.934E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_mc.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_mc.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="little_mcp_1"
+    type="revolute">
+    <origin
+      xyz="-0.13806 -0.007 -0.039298"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="palm" />
+    <child
+      link="little_mc" />
+    <axis
+      xyz="0 0 -1" />
+    <limit
+      lower="0"
+      upper="0.52"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="little_pp">
+    <inertial>
+      <origin
+        xyz="-0.019401 0.0009138 -8.5689E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.012074" />
+      <inertia
+        ixx="5.5072E-07"
+        ixy="2.6894E-09"
+        ixz="-2.6331E-08"
+        iyy="2.2957E-06"
+        iyz="-9.4189E-09"
+        izz="2.4182E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_pp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_pp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="little_mcp_2"
+    type="revolute">
+    <origin
+      xyz="-0.0225 0 -0.007"
+      rpy="1.5708 0 0" />
+    <parent
+      link="little_mc" />
+    <child
+      link="little_pp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="little_mp">
+    <inertial>
+      <origin
+        xyz="-0.013322 0.0011213 -4.5671E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.004978" />
+      <inertia
+        ixx="1.8186E-07"
+        ixy="6.7278E-09"
+        ixz="1.1112E-08"
+        iyy="3.5802E-07"
+        iyz="-1.4327E-09"
+        izz="3.2596E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_mp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_mp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="little_pip"
+    type="revolute">
+    <origin
+      xyz="-0.044205 0.001078 0"
+      rpy="0 0 0" />
+    <parent
+      link="little_pp" />
+    <child
+      link="little_mp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+  </joint>
+  <link
+    name="little_dp">
+    <inertial>
+      <origin
+        xyz="-0.01557 0.0019537 -0.00023825"
+        rpy="0 0 0" />
+      <mass
+        value="0.0053289" />
+      <inertia
+        ixx="1.8806E-07"
+        ixy="4.8528E-08"
+        ixz="1.9709E-14"
+        iyy="5.8246E-07"
+        iyz="-5.8428E-14"
+        izz="5.4114E-07" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_dp.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://to_urdf_defeature.SLDASM/meshes/little_dp.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="little_dip"
+    type="revolute">
+    <origin
+      xyz="-0.025 -1.5152E-05 0"
+      rpy="0 0 0" />
+    <parent
+      link="little_mp" />
+    <child
+      link="little_dp" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.57"
+      effort="0"
+      velocity="0" />
+	  </joint>
+  <link
+    name="little_tip" />
+  <joint
+    name="little_tip_joint"
+    type="fixed">
+    <origin
+      xyz="-0.025 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="little_dp" />
+    <child
+      link="little_tip" />
+  </joint>
+	</robot>

@@ -1,188 +1,276 @@
-import os
+from __future__ import annotations
+
+import argparse
+import importlib.util
 import sys
-import asyncio
+import threading
 import time
-import numpy as np
+from pathlib import Path
+
 import mujoco
 import mujoco.viewer
-from scipy.optimize import minimize
-from scipy.spatial.transform import Rotation
-from avp_stream import VisionProStreamer
-from parahand import ParaHand
+import numpy as np
+import yaml
 
-if sys.platform == "win32":
-    _start_server = asyncio.start_server
 
-    async def _start_server_without_reuse_port(*args, **kwargs):
-        kwargs.pop("reuse_port", None)
-        return await _start_server(*args, **kwargs)
+ROOT = Path(__file__).resolve().parent
+ANYDEX_ROOT = ROOT.parent / "teleop" / "AnyDexRetarget"
+ANYDEX_EXAMPLE_ROOT = ANYDEX_ROOT / "example"
+if ANYDEX_ROOT.exists() and str(ANYDEX_ROOT) not in sys.path:
+    sys.path.insert(0, str(ANYDEX_ROOT))
+if ANYDEX_EXAMPLE_ROOT.exists() and str(ANYDEX_EXAMPLE_ROOT) not in sys.path:
+    sys.path.insert(0, str(ANYDEX_EXAMPLE_ROOT))
 
-    asyncio.start_server = _start_server_without_reuse_port
+from anydexretarget import Retargeter
+from input.visionpro import VisionPro
 
-NODE_IDS = {
-    "wrist": 0,
-    "thumb":{
-        "cmc": 1,
-        "mcp": 2,
-        "ip": 3,
-        "tip": 4,
-    },
-    "index":{
-        "cmc": 5,
-        "mcp": 6,
-        "pip": 7,
-        "dip": 8,
-        "tip": 9,
-    },
-    "middle":{
-        "cmc": 10,
-        "mcp": 11,
-        "pip": 12,
-        "dip": 13,
-        "tip": 14,
-    },
-    "ring":{
-        "cmc": 15,
-        "mcp": 16,
-        "pip": 17,
-        "dip": 18,
-        "tip": 19,
-    },
-    "little":{
-        "cmc": 20,
-        "mcp": 21,
-        "pip": 22,
-        "dip": 23,
-        "tip": 24,
-    },
-    "forearm_wrist": 25,
-    "forearm_arm": 26,
-}
 
-WRIST_TO_PALM = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], dtype=np.float64)
-THUMB_MCP_TO_LINK2 = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]], dtype=np.float64)
+CALIBRATE_SCALING_PATH = ANYDEX_EXAMPLE_ROOT / "test" / "calibrate_scaling.py"
+NON_THUMB_FINGERS = ("index", "middle", "ring", "little")
 
-def is_valid_rotation_matrix(rotation):
-    if not np.all(np.isfinite(rotation)):
-        return False
-    if np.linalg.norm(rotation) < 1e-6:
-        return False
-    return np.linalg.det(rotation) > 0.0
 
-def calculate_flexion_angles(matrix_node_0, matrix_node_1):
-    '''计算手指弯曲关节角度'''
-    rotation_0 = matrix_node_0[:3, :3]
-    rotation_1 = matrix_node_1[:3, :3]
-    rotation_diff = rotation_1 @ rotation_0.T
-    x_axis = rotation_diff[:3, 0]
-    angle = np.arctan2(x_axis[1], x_axis[0])
-    return angle
+def load_calibrate_scaling_helpers():
+    spec = importlib.util.spec_from_file_location("anydex_calibrate_scaling", CALIBRATE_SCALING_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load calibration helper: {CALIBRATE_SCALING_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.FINGER_NAMES, module.collect_human_distances, module.get_robot_distances
 
-def calculate_abduction_angle(matrix_node_0, matrix_node_1):
-    '''计算手指侧摆关节角度'''
-    rotation_0 = matrix_node_0[:3, :3]
-    rotation_1 = matrix_node_1[:3, :3]
-    rotation_diff = rotation_1 @ rotation_0.T
 
-    z_axis = rotation_diff[:3, 2]
-    angle = - np.arctan2(z_axis[0], z_axis[2])
-    return angle
+FINGER_NAMES, collect_human_distances, get_robot_distances = load_calibrate_scaling_helpers()
 
-def calculate_local_z_rotation_angle(matrix_node_0, matrix_node_1):
-    rotation_0 = matrix_node_0[:3, :3]
-    rotation_1 = matrix_node_1[:3, :3]
-    rotation_diff = rotation_0.T @ rotation_1
-    return np.arctan2(rotation_diff[1, 0], rotation_diff[0, 0])
 
-def get_finger_ctrl(finger_name, r):
-    mcp_1_rad = calculate_abduction_angle(r['right_arm'][NODE_IDS[finger_name]['cmc']], r['right_arm'][NODE_IDS[finger_name]['mcp']])
-    mcp_2_rad = calculate_local_z_rotation_angle(r['right_arm'][NODE_IDS[finger_name]['cmc']], r['right_arm'][NODE_IDS[finger_name]['mcp']])
-    pip_rad = calculate_local_z_rotation_angle(r['right_arm'][NODE_IDS[finger_name]['mcp']], r['right_arm'][NODE_IDS[finger_name]['pip']])
-    dip_rad = calculate_local_z_rotation_angle(r['right_arm'][NODE_IDS[finger_name]['pip']], r['right_arm'][NODE_IDS[finger_name]['dip']])
-    tendon_m = 0.001 * (np.sqrt(170 * (1 - np.cos(1.72 - dip_rad))) + np.sqrt(183 * (1 - np.cos(1.72 - pip_rad))))
-    pip_dip_m = 0.025 - tendon_m
-    return [mcp_1_rad, mcp_2_rad, pip_dip_m]
+class LoopMetrics:
+    def __init__(self, interval_s: float):
+        self.interval_s = interval_s
+        self.lock = threading.Lock()
+        self.reset(time.perf_counter())
 
-def make_thumb_ik_context(model):
-    thumb_data = mujoco.MjData(model)
-    home_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
-    joint_names = ["thumb_joint_0", "thumb_joint_1", "thumb_joint_2"]
-    actuator_names = ["thumb_joint_0", "thumb_joint_1", "thumb_joint_2"]
+    def reset(self, now: float):
+        self.window_start = now
+        self.loops = 0
+        self.valid_inputs = 0
+        self.changed_inputs = 0
+        self.applied_controls = 0
+        self.last_pose = None
+        self.time_sums = {
+            "input": 0.0,
+            "retarget": 0.0,
+            "apply": 0.0,
+            "mj_step": 0.0,
+            "viewer_sync": 0.0,
+            "update_sim": 0.0,
+            "sleep": 0.0,
+            "loop": 0.0,
+        }
+        self.time_counts = {key: 0 for key in self.time_sums}
 
-    joint_qpos_adrs = [
-        model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)]
-        for name in joint_names
-    ]
-    actuator_ids = [
-        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
-        for name in actuator_names
-    ]
+    def add_time(self, key: str, value_s: float):
+        with self.lock:
+            self.time_sums[key] += value_s
+            self.time_counts[key] += 1
 
-    return {
-        "data": thumb_data,
-        "home_id": home_id,
-        "joint_qpos_adrs": joint_qpos_adrs,
-        "bounds": model.actuator_ctrlrange[actuator_ids].T,
-        "palm_id": mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "palm"),
-        "link2_id": mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "thumb_link_2"),
-        "prev_q": np.array([0.0, 0.0, 0.0], dtype=np.float64),
-    }
+    def add_loop(self):
+        with self.lock:
+            self.loops += 1
 
-def get_thumb_link2_rotation(model, thumb_ik_context, q):
-    data = thumb_ik_context["data"]
-    mujoco.mj_resetDataKeyframe(model, data, thumb_ik_context["home_id"])
-    for qpos_adr, value in zip(thumb_ik_context["joint_qpos_adrs"], q):
-        data.qpos[qpos_adr] = value
-    mujoco.mj_forward(model, data)
+    def add_control(self):
+        with self.lock:
+            self.applied_controls += 1
 
-    palm_rotation = data.xmat[thumb_ik_context["palm_id"]].reshape(3, 3)
-    link2_rotation = data.xmat[thumb_ik_context["link2_id"]].reshape(3, 3)
-    return palm_rotation.T @ link2_rotation
+    def record_input(self, pose: np.ndarray | None):
+        if pose is None:
+            return
+        with self.lock:
+            self.valid_inputs += 1
+            if self.last_pose is None or not np.allclose(pose, self.last_pose, atol=1e-6, rtol=0.0):
+                self.changed_inputs += 1
+                self.last_pose = pose.copy()
 
-def solve_thumb_link2_ik(model, thumb_ik_context, target_rotation):
-    lower, upper = thumb_ik_context["bounds"]
-    initial_q = np.clip(thumb_ik_context["prev_q"], lower, upper)
+    def maybe_print(self, now: float):
+        with self.lock:
+            elapsed = now - self.window_start
+            if elapsed < self.interval_s:
+                return
 
-    def objective(q):
-        current_rotation = get_thumb_link2_rotation(model, thumb_ik_context, q)
-        rotation_error = current_rotation.T @ target_rotation
-        rotvec = Rotation.from_matrix(rotation_error).as_rotvec()
-        return float(rotvec @ rotvec)
+            loops = self.loops
+            valid_inputs = self.valid_inputs
+            changed_inputs = self.changed_inputs
+            applied_controls = self.applied_controls
+            time_sums = self.time_sums.copy()
+            time_counts = self.time_counts.copy()
+            self.reset(now)
 
-    result = minimize(
-        objective,
-        initial_q,
-        method="L-BFGS-B",
-        bounds=list(zip(lower, upper)),
-        options={"maxiter": 25, "ftol": 1e-8},
+        def hz(count: int) -> float:
+            return count / elapsed if elapsed > 0.0 else 0.0
+
+        def avg_ms(key: str) -> float:
+            return 1000.0 * time_sums[key] / max(1, time_counts[key])
+
+        print(
+            "[metrics] "
+            f"sim={hz(loops):5.1f}Hz "
+            f"valid_input={hz(valid_inputs):5.1f}Hz "
+            f"changed_input~={hz(changed_inputs):5.1f}Hz "
+            f"control={hz(applied_controls):5.1f}Hz | "
+            f"avg_ms input={avg_ms('input'):.2f} "
+            f"retarget={avg_ms('retarget'):.2f} "
+            f"apply={avg_ms('apply'):.2f} "
+            f"mj_step={avg_ms('mj_step'):.2f} "
+            f"sync={avg_ms('viewer_sync'):.2f} "
+            f"update_sim={avg_ms('update_sim'):.2f} "
+            f"sleep={avg_ms('sleep'):.2f} "
+            f"loop={avg_ms('loop'):.2f}",
+            flush=True,
+        )
+
+
+def resolve_path(path_str: str, base_dir: Path) -> Path:
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    return path.resolve()
+
+
+def load_retarget_config(config_path: Path, urdf_override: str | None = None) -> dict:
+    with config_path.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    if not isinstance(config, dict):
+        raise ValueError(f"Retarget config must be a YAML mapping: {config_path}")
+
+    robot_config = config.setdefault("robot", {})
+    if urdf_override:
+        robot_config["urdf_path"] = str(resolve_path(urdf_override, ROOT))
+    elif "urdf_path" in robot_config:
+        robot_config["urdf_path"] = str(resolve_path(robot_config["urdf_path"], config_path.parent))
+    else:
+        raise ValueError(f"Missing robot.urdf_path in retarget config: {config_path}")
+
+    return config
+
+
+def get_latest_mediapipe(input_device: VisionPro, hand_side: str) -> np.ndarray | None:
+    try:
+        fingers_data = input_device.get_fingers_data()
+    except (AttributeError, KeyError, TypeError):
+        return None
+
+    fingers_pose = np.asarray(fingers_data.get(f"{hand_side}_fingers"))
+    if fingers_pose.shape != (21, 3) or np.allclose(fingers_pose, 0.0):
+        return None
+    return fingers_pose
+
+
+def qpos_by_name(retargeter: Retargeter, qpos: np.ndarray) -> dict[str, float]:
+    names = retargeter.optimizer.robot.dof_joint_names
+    return {name: float(qpos[i]) for i, name in enumerate(names)}
+
+
+def wait_for_stable_hand(
+    input_device: VisionPro,
+    hand_side: str,
+    stable_duration_s: float,
+    threshold_m: float,
+    timeout_s: float,
+) -> bool:
+    print(
+        f"Hold your {hand_side} hand open and still. "
+        f"Waiting for {stable_duration_s:.1f}s stable data..."
     )
-    thumb_ik_context["prev_q"] = result.x
-    return result.x
+    start = time.perf_counter()
+    samples: list[tuple[float, np.ndarray]] = []
+    last_print = 0.0
 
-def get_thumb_ctrl(model, thumb_ik_context, r, previous_ctrl):
-    thumb_matrix_wrist = r['right_arm'][NODE_IDS['wrist']][:3, :3]
-    thumb_matrix_mcp = r['right_arm'][NODE_IDS['thumb']['mcp']][:3, :3]
-    if not is_valid_rotation_matrix(thumb_matrix_wrist) or not is_valid_rotation_matrix(thumb_matrix_mcp):
-        return previous_ctrl
+    while time.perf_counter() - start < timeout_s:
+        now = time.perf_counter()
+        pose = get_latest_mediapipe(input_device, hand_side)
+        if pose is None:
+            time.sleep(0.01)
+            continue
 
-    thumb_matrix_diff = WRIST_TO_PALM @ thumb_matrix_wrist.T @ thumb_matrix_mcp @ THUMB_MCP_TO_LINK2
-    if not is_valid_rotation_matrix(thumb_matrix_diff):
-        return previous_ctrl
+        wrist_relative = (pose - pose[0]).reshape(-1)
+        samples.append((now, wrist_relative))
+        samples = [(t, v) for t, v in samples if now - t <= stable_duration_s]
 
-    cmc_1_rad, cmc_2_rad, mcp_rad = solve_thumb_link2_ik(model, thumb_ik_context, thumb_matrix_diff)
-    ip_rad = calculate_local_z_rotation_angle(r['right_arm'][NODE_IDS['thumb']['mcp']], r['right_arm'][NODE_IDS['thumb']['ip']])
-    return [cmc_1_rad, cmc_2_rad, mcp_rad, ip_rad]
+        if len(samples) >= 5:
+            values = np.vstack([v for _, v in samples])
+            max_std_m = float(np.max(np.std(values, axis=0)))
+            if now - last_print >= 1.0:
+                last_print = now
+                print(f"  stability max std: {max_std_m * 100:.2f} cm")
+            if now - samples[0][0] >= stable_duration_s and max_std_m <= threshold_m:
+                print("  hand is stable, start averaging segment lengths")
+                return True
 
-def build_hand_positions(model, thumb_ik_context, r, previous_thumb_ctrl):
-    thumb_ctrl = get_thumb_ctrl(model, thumb_ik_context, r, previous_thumb_ctrl)
-    # thumb_ctrl = [0.0, 0.0, 0.0, 0.0]
-    index_ctrl = get_finger_ctrl("index", r)
-    middle_ctrl = get_finger_ctrl("middle", r)
-    ring_ctrl = get_finger_ctrl("ring", r)
-    little_ctrl = get_finger_ctrl("little", r)
-    return thumb_ctrl + index_ctrl + middle_ctrl + ring_ctrl + little_ctrl, thumb_ctrl
+        time.sleep(0.01)
 
-def set_mujoco_ctrl(model, data, actuator_name, value):
+    print("  stable-hand wait timed out; continuing with averaging anyway")
+    return False
+
+
+def ratio(robot_d: float | None, human_d: float | None) -> float:
+    if robot_d and human_d and human_d > 1e-4:
+        return round(robot_d / human_d, 4)
+    return 1.0
+
+
+def auto_segment_scaling(
+    input_device: VisionPro,
+    retargeter: Retargeter,
+    hand_side: str,
+    duration_s: float,
+    stable_duration_s: float,
+    stable_threshold_m: float,
+    stable_timeout_s: float,
+) -> dict[str, list[float]] | None:
+    wait_for_stable_hand(
+        input_device=input_device,
+        hand_side=hand_side,
+        stable_duration_s=stable_duration_s,
+        threshold_m=stable_threshold_m,
+        timeout_s=stable_timeout_s,
+    )
+
+    print(f"Collecting hand samples for {duration_s:.1f}s...")
+    (pip_robot, dip_robot, tip_robot), _ = get_robot_distances(retargeter.optimizer)
+    frames, cumulative, _ = collect_human_distances(
+        input_device=input_device,
+        retargeter=retargeter,
+        hand=hand_side,
+        duration=duration_s,
+    )
+    if frames == 0 or cumulative is None:
+        print("No valid AVP hand frames for auto segment scaling; using YAML defaults")
+        return None
+
+    pip_human, dip_human, tip_human = cumulative
+    finger_names = [FINGER_NAMES[i] for i in retargeter.optimizer.mp_finger_indices]
+    segment_scaling = {}
+    for i, finger_name in enumerate(finger_names):
+        segment_scaling[finger_name] = [
+            ratio(pip_robot[i], pip_human[i]),
+            ratio(dip_robot[i], dip_human[i]),
+            ratio(tip_robot[i], tip_human[i]),
+        ]
+
+    print(f"Auto segment_scaling from {frames} frames:")
+    for finger_name, scales in segment_scaling.items():
+        print(f"  {finger_name}: {scales}")
+    return segment_scaling
+
+
+def init_mujoco_model(xml_path: Path) -> tuple[mujoco.MjModel, mujoco.MjData]:
+    model = mujoco.MjModel.from_xml_path(str(xml_path))
+    data = mujoco.MjData(model)
+    home_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
+    if home_id != -1:
+        mujoco.mj_resetDataKeyframe(model, data, home_id)
+    mujoco.mj_forward(model, data)
+    return model, data
+
+
+def set_mujoco_ctrl(model: mujoco.MjModel, data: mujoco.MjData, actuator_name: str, value: float):
     actuator_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_name)
     if actuator_id == -1:
         raise ValueError(f"Actuator not found: {actuator_name}")
@@ -190,16 +278,18 @@ def set_mujoco_ctrl(model, data, actuator_name, value):
     low, high = model.actuator_ctrlrange[actuator_id]
     data.ctrl[actuator_id] = np.clip(value, low, high)
 
-def set_mujoco_finger_ctrl(model, data, finger_name, ctrl):
+
+def set_mujoco_finger_ctrl(model: mujoco.MjModel, data: mujoco.MjData, finger_name: str, ctrl: np.ndarray):
     actuator_names = [
         f"{finger_name}_swing",
         f"{finger_name}_joint_0",
         f"{finger_name}_tendon",
     ]
     for actuator_name, value in zip(actuator_names, ctrl):
-        set_mujoco_ctrl(model, data, actuator_name, value)
+        set_mujoco_ctrl(model, data, actuator_name, float(value))
 
-def set_mujoco_thumb_ctrl(model, data, ctrl):
+
+def set_mujoco_thumb_ctrl(model: mujoco.MjModel, data: mujoco.MjData, ctrl: np.ndarray):
     actuator_names = [
         "thumb_joint_0",
         "thumb_joint_1",
@@ -207,9 +297,10 @@ def set_mujoco_thumb_ctrl(model, data, ctrl):
         "thumb_joint_3",
     ]
     for actuator_name, value in zip(actuator_names, ctrl):
-        set_mujoco_ctrl(model, data, actuator_name, value)
+        set_mujoco_ctrl(model, data, actuator_name, float(value))
 
-def apply_mujoco_abduction_constraints(model, data):
+
+def apply_mujoco_abduction_constraints(model: mujoco.MjModel, data: mujoco.MjData):
     index_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "index_swing")
     middle_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "middle_swing")
     ring_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, "ring_swing")
@@ -223,71 +314,224 @@ def apply_mujoco_abduction_constraints(model, data):
     ring_upper = min(data.ctrl[little_id], model.actuator_ctrlrange[ring_id, 1])
     data.ctrl[ring_id] = np.clip(data.ctrl[ring_id], ring_lower, ring_upper)
 
-def apply_mujoco_visualization_ctrl(model, data, positions):
-    set_mujoco_thumb_ctrl(model, data, positions[0:4])
-    for finger_name, start_index in (
-        ("index", 4),
-        ("middle", 7),
-        ("ring", 10),
-        ("little", 13),
-    ):
-        mcp_1_rad, mcp_2_rad, pip_dip_m = positions[start_index:start_index + 3]
-        tendon_m = 0.025 - pip_dip_m
-        set_mujoco_finger_ctrl(model, data, finger_name, [mcp_1_rad, mcp_2_rad, tendon_m])
+
+def apply_retarget_qpos_to_mujoco(
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    retargeter: Retargeter,
+    qpos: np.ndarray,
+) -> bool:
+    qpos = np.asarray(qpos, dtype=np.float64)
+    if not np.all(np.isfinite(qpos)):
+        return False
+
+    qpos_map = qpos_by_name(retargeter, qpos)
+    thumb_ctrl = np.array([
+        qpos_map["thumb_cmc_1"],
+        qpos_map["thumb_cmc_2"],
+        qpos_map["thumb_mcp"],
+        qpos_map["thumb_ip"],
+    ])
+    set_mujoco_thumb_ctrl(model, data, thumb_ctrl)
+
+    for finger_name in NON_THUMB_FINGERS:
+        mcp_1_rad = qpos_map[f"{finger_name}_mcp_1"]
+        mcp_2_rad = qpos_map[f"{finger_name}_mcp_2"]
+        pip_rad = qpos_map[f"{finger_name}_pip"]
+        dip_rad = qpos_map[f"{finger_name}_dip"]
+        tendon_m = 0.001 * (
+            np.sqrt(170 * (1 - np.cos(1.72 - dip_rad)))
+            + np.sqrt(183 * (1 - np.cos(1.72 - pip_rad)))
+        )
+        set_mujoco_finger_ctrl(model, data, finger_name, np.array([mcp_1_rad, mcp_2_rad, tendon_m]))
     apply_mujoco_abduction_constraints(model, data)
+    return True
 
-def main():
-    model = mujoco.MjModel.from_xml_path("para_fr3.xml")
-    data = mujoco.MjData(model)
 
-    home_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, "home")
-    mujoco.mj_resetDataKeyframe(model, data, home_id)
-    mujoco.mj_forward(model, data)
-    thumb_ik_context = make_thumb_ik_context(model)
+def run(args: argparse.Namespace):
+    config_path = resolve_path(args.config, ROOT)
+    model_path = resolve_path(args.model, ROOT)
 
-    avp_ip = "192.168.31.151"  # Vision Pro IP (shown in the app)
-    s = VisionProStreamer(ip=avp_ip)
-    s.configure_mujoco("para_fr3.xml", model, data, relative_to=[0, 0, 0.8, 90], force_reload=True,)
-    s.start_webrtc()
-    s.set_origin("sim")
+    retarget_config = load_retarget_config(config_path, args.urdf)
+    retargeter = Retargeter.from_config(retarget_config, args.hand)
+    urdf_path = Path(retarget_config["robot"]["urdf_path"])
 
-    hand = ParaHand()
-    if not hand.connect():
-        raise RuntimeError("Failed to connect ParaHand")
-
-    loop_period_s = 0.02
-    thumb_ctrl = [0.0, 0.0, 0.0, 0.0]
-
+    model, data = init_mujoco_model(model_path)
     try:
-        hand.enable()
-        hand.set_tendon_motor_speeds_broadcast(100.0)
+        input_device = VisionPro(ip=args.ip)
+        streamer = input_device.streamer
+        if hasattr(streamer, "configure_mujoco"):
+            streamer.configure_mujoco(str(model_path), model, data, relative_to=[0, 0, 0.8, 90], force_reload=True)
+        if hasattr(streamer, "start_webrtc"):
+            streamer.start_webrtc()
+        if hasattr(streamer, "set_origin"):
+            streamer.set_origin("sim")
+
+        if args.auto_segment_scaling:
+            try:
+                segment_scaling = auto_segment_scaling(
+                    input_device=input_device,
+                    retargeter=retargeter,
+                    hand_side=args.hand,
+                    duration_s=args.calibrate_duration,
+                    stable_duration_s=args.stable_duration,
+                    stable_threshold_m=args.stable_threshold,
+                    stable_timeout_s=args.stable_timeout,
+                )
+            except Exception as exc:
+                print(f"Auto segment_scaling failed ({exc}); using YAML defaults")
+                segment_scaling = None
+            if segment_scaling is not None:
+                retarget_config.setdefault("retarget", {})["segment_scaling"] = segment_scaling
+                retargeter = Retargeter.from_config(retarget_config, args.hand)
+
+        control_period_s = 1.0 / args.rate
+        sim_period_s = float(model.opt.timestep)
+        print(f"Using config: {config_path}")
+        print(f"Using retarget URDF: {urdf_path}")
+        print(f"Using MuJoCo XML: {model_path}")
+        print(f"AVP IP: {args.ip}, hand: {args.hand}")
+        print(f"Control dt: {control_period_s:.4f}s ({args.rate:.1f}Hz)")
+        print(f"MuJoCo sim dt: {sim_period_s:.4f}s ({1.0 / sim_period_s:.1f}Hz)")
+        metrics = LoopMetrics(args.metrics_interval) if args.metrics_interval > 0.0 else None
+
+        latest_qpos = np.zeros(retargeter.num_joints, dtype=np.float64)
+        qpos_lock = threading.Lock()
+        qpos_ready = False
+        qpos_updated = False
+        stop_event = threading.Event()
+
+        def control_thread_fn():
+            nonlocal qpos_ready, qpos_updated
+            while not stop_event.is_set():
+                loop_start = time.perf_counter()
+
+                t0 = time.perf_counter()
+                mediapipe_pose = get_latest_mediapipe(input_device, args.hand)
+                t1 = time.perf_counter()
+                if metrics is not None:
+                    metrics.add_time("input", t1 - t0)
+                    metrics.record_input(mediapipe_pose)
+
+                if mediapipe_pose is not None:
+                    t0 = time.perf_counter()
+                    qpos = retargeter.retarget(mediapipe_pose)
+                    t1 = time.perf_counter()
+                    if metrics is not None:
+                        metrics.add_time("retarget", t1 - t0)
+
+                    if np.all(np.isfinite(qpos)):
+                        with qpos_lock:
+                            latest_qpos[:] = qpos
+                            qpos_ready = True
+                            qpos_updated = True
+                        if metrics is not None:
+                            metrics.add_control()
+
+                sleep_time = control_period_s - (time.perf_counter() - loop_start)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+        control_thread = threading.Thread(target=control_thread_fn, daemon=True)
+
         with mujoco.viewer.launch_passive(model, data) as viewer:
-            viewer.cam.lookat[:] = [0.0, 0.0, 0.35]
-            viewer.cam.distance = 1.2
-            viewer.cam.azimuth = 180
+            viewer.cam.lookat[:] = [-0.15, -0.02, 0.0]
+            viewer.cam.distance = 0.45
+            viewer.cam.azimuth = 120
             viewer.cam.elevation = -25
 
+            control_thread.start()
             while viewer.is_running():
                 step_start = time.perf_counter()
-                r = s.get_latest()
+                if metrics is not None:
+                    metrics.add_loop()
 
-                positions, thumb_ctrl = build_hand_positions(model, thumb_ik_context, r, thumb_ctrl)
-                hand.set_hand_positions_broadcast(positions)
-                apply_mujoco_visualization_ctrl(model, data, positions)
+                qpos_to_apply = None
+                with qpos_lock:
+                    if qpos_ready and qpos_updated:
+                        qpos_to_apply = latest_qpos.copy()
+                        qpos_updated = False
 
+                if qpos_to_apply is not None:
+                    t0 = time.perf_counter()
+                    apply_retarget_qpos_to_mujoco(model, data, retargeter, qpos_to_apply)
+                    t1 = time.perf_counter()
+                    if metrics is not None:
+                        metrics.add_time("apply", t1 - t0)
+
+                t0 = time.perf_counter()
                 mujoco.mj_step(model, data)
-                viewer.sync()
-                s.update_sim()
+                t1 = time.perf_counter()
+                if metrics is not None:
+                    metrics.add_time("mj_step", t1 - t0)
 
-                sleep_time = max(0.0, loop_period_s - (time.perf_counter() - step_start))
-                time.sleep(sleep_time)
+                t0 = time.perf_counter()
+                viewer.sync()
+                t1 = time.perf_counter()
+                if metrics is not None:
+                    metrics.add_time("viewer_sync", t1 - t0)
+
+                if hasattr(streamer, "update_sim"):
+                    t0 = time.perf_counter()
+                    streamer.update_sim()
+                    t1 = time.perf_counter()
+                    if metrics is not None:
+                        metrics.add_time("update_sim", t1 - t0)
+
+                sleep_time = sim_period_s - (time.perf_counter() - step_start)
+                if sleep_time > 0:
+                    t0 = time.perf_counter()
+                    time.sleep(sleep_time)
+                    t1 = time.perf_counter()
+                    if metrics is not None:
+                        metrics.add_time("sleep", t1 - t0)
+                if metrics is not None:
+                    now = time.perf_counter()
+                    metrics.add_time("loop", now - step_start)
+                    metrics.maybe_print(now)
+        stop_event.set()
+        control_thread.join(timeout=1.0)
     except KeyboardInterrupt:
-        pass
-    finally:
         try:
-            hand.disable()
-        finally:
-            hand.disconnect()
+            stop_event.set()
+            control_thread.join(timeout=1.0)
+        except UnboundLocalError:
+            pass
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description="AnyDexRetarget AVP retargeting viewer for ParaHand MuJoCo.")
+    parser.add_argument("--ip", default="192.168.31.151", help="Vision Pro IP.")
+    parser.add_argument("--hand", default="right", choices=("left", "right"), help="AVP hand side to retarget.")
+    parser.add_argument("--rate", type=float, default=10.0, help="AVP input + retarget control rate in Hz.")
+    parser.add_argument("--config", default="config_teleop.yaml", help="AnyDexRetarget YAML config path.")
+    parser.add_argument("--model", default="mujoco/para_fr3.xml", help="MuJoCo XML model path.")
+    parser.add_argument("--urdf", default=None, help="Override robot.urdf_path from the YAML config.")
+    parser.add_argument(
+        "--metrics-interval",
+        type=float,
+        default=1.0,
+        help="Print measured loop/control frequencies every N seconds; set <=0 to disable.",
+    )
+    parser.add_argument(
+        "--no-auto-segment-scaling",
+        dest="auto_segment_scaling",
+        action="store_false",
+        help="Use segment_scaling from YAML instead of measuring it from Vision Pro at startup.",
+    )
+    parser.set_defaults(auto_segment_scaling=True)
+    parser.add_argument("--calibrate-duration", type=float, default=3.0, help="Seconds to average AVP hand samples.")
+    parser.add_argument("--stable-duration", type=float, default=1.0, help="Required stable-hand window before averaging.")
+    parser.add_argument(
+        "--stable-threshold",
+        type=float,
+        default=0.005,
+        help="Max wrist-relative keypoint std in meters for stable-hand detection.",
+    )
+    parser.add_argument("--stable-timeout", type=float, default=20.0, help="Max seconds to wait for a stable hand.")
+    run(parser.parse_args())
+
 
 if __name__ == "__main__":
     main()

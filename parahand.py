@@ -19,7 +19,7 @@ COUPLED_MCP1_JOINTS = (
     "ring.mcp_1",
     "little.mcp_1",
 )
-DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.yaml")
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config_hand.yaml")
 DEFAULT_FEEDBACK = {
     "position_deg": None,
     "speed_pct": None,
@@ -419,7 +419,7 @@ class ParaHand:
         try:
             import yaml
         except ImportError as exc:
-            raise ImportError("保存 config.yaml 需要先安装 PyYAML") from exc
+            raise ImportError("保存 config_hand.yaml 需要先安装 PyYAML") from exc
 
         config_text = yaml.safe_dump(self.config, allow_unicode=True, sort_keys=False)
         self.config_path.write_text(config_text, encoding="utf-8")
@@ -666,7 +666,7 @@ class ParaHand:
         try:
             import yaml
         except ImportError as exc:
-            raise ImportError("读取 config.yaml 需要先安装 PyYAML") from exc
+            raise ImportError("读取 config_hand.yaml 需要先安装 PyYAML") from exc
 
         config_text = self._normalize_yaml_text(config_path.read_text(encoding="utf-8"))
         config = yaml.safe_load(config_text) or {}
