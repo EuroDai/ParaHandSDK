@@ -708,10 +708,10 @@ class MainWindow(QMainWindow):
         self._set_connection_state(False)
         self._apply_control_mode_to_rows()
         self._set_status(f"就绪 | 配置: {self.hand.config_path}")
+        self._resize_to_minimum_start_width()
 
     def _build_ui(self):
-        self.setWindowTitle("ParaHand GUI")
-        self.resize(1200, 820)
+        self.setWindowTitle("ParaHand Center")
 
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
@@ -831,6 +831,26 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.connection_config_box)
         main_layout.addWidget(self.scroll_area)
         self.setCentralWidget(central_widget)
+
+    def _resize_to_minimum_start_width(self):
+        self.ensurePolished()
+        central_widget = self.centralWidget()
+        if central_widget is not None:
+            central_widget.ensurePolished()
+
+        minimum_width = max(self.minimumSizeHint().width(), self.minimumWidth())
+        if central_widget is not None:
+            minimum_width = max(minimum_width, central_widget.minimumSizeHint().width())
+
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            minimum_width = min(minimum_width, available.width())
+            target_height = min(820, available.height())
+        else:
+            target_height = 820
+
+        self.resize(minimum_width, target_height)
 
     def _connect_signals(self):
         self.connect_button.clicked.connect(self._connect_device)

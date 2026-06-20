@@ -23,10 +23,12 @@ if ANYDEX_EXAMPLE_ROOT.exists() and str(ANYDEX_EXAMPLE_ROOT) not in sys.path:
 
 from anydexretarget import Retargeter
 from input.visionpro import VisionPro
+from parahand import ParaHand
 
 
 CALIBRATE_SCALING_PATH = ANYDEX_EXAMPLE_ROOT / "test" / "calibrate_scaling.py"
 NON_THUMB_FINGERS = ("index", "middle", "ring", "little")
+TENDON_TO_PIP_DIP_OFFSET_M = 0.025
 
 
 def load_calibrate_scaling_helpers():
@@ -61,6 +63,7 @@ class LoopMetrics:
             "mj_step": 0.0,
             "viewer_sync": 0.0,
             "update_sim": 0.0,
+            "real_hand": 0.0,
             "sleep": 0.0,
             "loop": 0.0,
         }
@@ -120,6 +123,7 @@ class LoopMetrics:
             f"mj_step={avg_ms('mj_step'):.2f} "
             f"sync={avg_ms('viewer_sync'):.2f} "
             f"update_sim={avg_ms('update_sim'):.2f} "
+            f"real_hand={avg_ms('real_hand'):.2f} "
             f"sleep={avg_ms('sleep'):.2f} "
             f"loop={avg_ms('loop'):.2f}",
             flush=True,
@@ -173,6 +177,7 @@ def wait_for_stable_hand(
     stable_duration_s: float,
     threshold_m: float,
     timeout_s: float,
+    min_wait_s: float,
 ) -> bool:
     print(
         f"Hold your {hand_side} hand open and still. "
@@ -199,6 +204,8 @@ def wait_for_stable_hand(
             if now - last_print >= 1.0:
                 last_print = now
                 print(f"  stability max std: {max_std_m * 100:.2f} cm")
+            if now - start < min_wait_s:
+                continue
             if now - samples[0][0] >= stable_duration_s and max_std_m <= threshold_m:
                 print("  hand is stable, start averaging segment lengths")
                 return True
@@ -223,6 +230,7 @@ def auto_segment_scaling(
     stable_duration_s: float,
     stable_threshold_m: float,
     stable_timeout_s: float,
+    stable_min_wait_s: float,
 ) -> dict[str, list[float]] | None:
     wait_for_stable_hand(
         input_device=input_device,
@@ -230,6 +238,7 @@ def auto_segment_scaling(
         stable_duration_s=stable_duration_s,
         threshold_m=stable_threshold_m,
         timeout_s=stable_timeout_s,
+        min_wait_s=stable_min_wait_s,
     )
 
     print(f"Collecting hand samples for {duration_s:.1f}s...")
@@ -277,6 +286,20 @@ def set_mujoco_ctrl(model: mujoco.MjModel, data: mujoco.MjData, actuator_name: s
 
     low, high = model.actuator_ctrlrange[actuator_id]
     data.ctrl[actuator_id] = np.clip(value, low, high)
+
+
+def get_mujoco_joint_qpos(model: mujoco.MjModel, data: mujoco.MjData, joint_name: str) -> float:
+    joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+    if joint_id == -1:
+        raise ValueError(f"Joint not found: {joint_name}")
+    return float(data.qpos[model.jnt_qposadr[joint_id]])
+
+
+def get_mujoco_tendon_length(model: mujoco.MjModel, data: mujoco.MjData, tendon_name: str) -> float:
+    tendon_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_TENDON, tendon_name)
+    if tendon_id == -1:
+        raise ValueError(f"Tendon not found: {tendon_name}")
+    return float(data.ten_length[tendon_id])
 
 
 def set_mujoco_finger_ctrl(model: mujoco.MjModel, data: mujoco.MjData, finger_name: str, ctrl: np.ndarray):
@@ -348,6 +371,41 @@ def apply_retarget_qpos_to_mujoco(
     return True
 
 
+def mujoco_state_to_parahand_positions(model: mujoco.MjModel, data: mujoco.MjData, hand: ParaHand) -> list[float]:
+    values_by_joint = {
+        "thumb.cmc_1": get_mujoco_joint_qpos(model, data, "thumb_joint_0"),
+        "thumb.cmc_2": get_mujoco_joint_qpos(model, data, "thumb_joint_1"),
+        "thumb.mcp": get_mujoco_joint_qpos(model, data, "thumb_joint_2"),
+        "thumb.ip": get_mujoco_joint_qpos(model, data, "thumb_joint_3"),
+    }
+
+    for finger_name in NON_THUMB_FINGERS:
+        tendon_m = get_mujoco_tendon_length(model, data, f"{finger_name}_tendon")
+        values_by_joint[f"{finger_name}.mcp_1"] = get_mujoco_joint_qpos(model, data, f"{finger_name}_swing")
+        values_by_joint[f"{finger_name}.mcp_2"] = get_mujoco_joint_qpos(model, data, f"{finger_name}_joint_0")
+        values_by_joint[f"{finger_name}.pip_dip"] = TENDON_TO_PIP_DIP_OFFSET_M - tendon_m
+
+    return [values_by_joint[joint_name] for joint_name in hand.get_hand_joint_order()]
+
+
+def init_real_hand(args: argparse.Namespace) -> ParaHand | None:
+    if args.no_real_hand:
+        print("Real ParaHand output disabled")
+        return None
+
+    hand_config_path = resolve_path(args.hand_config, ROOT)
+    hand = ParaHand(str(hand_config_path))
+    print(f"Using real ParaHand config: {hand.config_path}")
+    if not hand.connect():
+        raise RuntimeError(f"Failed to connect real ParaHand on {hand.motor.port}")
+
+    hand.enable()
+    if args.tendon_speed is not None:
+        hand.set_tendon_motor_speeds_broadcast(args.tendon_speed, args.default_motor_speed)
+    print("Real ParaHand connected and enabled")
+    return hand
+
+
 def run(args: argparse.Namespace):
     config_path = resolve_path(args.config, ROOT)
     model_path = resolve_path(args.model, ROOT)
@@ -357,6 +415,9 @@ def run(args: argparse.Namespace):
     urdf_path = Path(retarget_config["robot"]["urdf_path"])
 
     model, data = init_mujoco_model(model_path)
+    real_hand = None
+    control_thread = None
+    stop_event = threading.Event()
     try:
         input_device = VisionPro(ip=args.ip)
         streamer = input_device.streamer
@@ -377,6 +438,7 @@ def run(args: argparse.Namespace):
                     stable_duration_s=args.stable_duration,
                     stable_threshold_m=args.stable_threshold,
                     stable_timeout_s=args.stable_timeout,
+                    stable_min_wait_s=args.stable_min_wait,
                 )
             except Exception as exc:
                 print(f"Auto segment_scaling failed ({exc}); using YAML defaults")
@@ -394,12 +456,13 @@ def run(args: argparse.Namespace):
         print(f"Control dt: {control_period_s:.4f}s ({args.rate:.1f}Hz)")
         print(f"MuJoCo sim dt: {sim_period_s:.4f}s ({1.0 / sim_period_s:.1f}Hz)")
         metrics = LoopMetrics(args.metrics_interval) if args.metrics_interval > 0.0 else None
+        real_hand = init_real_hand(args)
+        real_hand_period_s = 1.0 / args.real_hand_rate if real_hand is not None else None
 
         latest_qpos = np.zeros(retargeter.num_joints, dtype=np.float64)
         qpos_lock = threading.Lock()
         qpos_ready = False
         qpos_updated = False
-        stop_event = threading.Event()
 
         def control_thread_fn():
             nonlocal qpos_ready, qpos_updated
@@ -441,6 +504,8 @@ def run(args: argparse.Namespace):
             viewer.cam.elevation = -25
 
             control_thread.start()
+            last_real_hand_send = 0.0
+            mujoco_target_started = False
             while viewer.is_running():
                 step_start = time.perf_counter()
                 if metrics is not None:
@@ -454,16 +519,33 @@ def run(args: argparse.Namespace):
 
                 if qpos_to_apply is not None:
                     t0 = time.perf_counter()
-                    apply_retarget_qpos_to_mujoco(model, data, retargeter, qpos_to_apply)
+                    applied = apply_retarget_qpos_to_mujoco(model, data, retargeter, qpos_to_apply)
                     t1 = time.perf_counter()
                     if metrics is not None:
                         metrics.add_time("apply", t1 - t0)
+                    if applied:
+                        mujoco_target_started = True
 
                 t0 = time.perf_counter()
                 mujoco.mj_step(model, data)
                 t1 = time.perf_counter()
                 if metrics is not None:
                     metrics.add_time("mj_step", t1 - t0)
+
+                now = time.perf_counter()
+                if (
+                    real_hand is not None
+                    and real_hand_period_s is not None
+                    and mujoco_target_started
+                    and now - last_real_hand_send >= real_hand_period_s
+                ):
+                    t0 = time.perf_counter()
+                    real_hand_positions = mujoco_state_to_parahand_positions(model, data, real_hand)
+                    real_hand.set_hand_positions_broadcast(real_hand_positions)
+                    t1 = time.perf_counter()
+                    last_real_hand_send = t1
+                    if metrics is not None:
+                        metrics.add_time("real_hand", t1 - t0)
 
                 t0 = time.perf_counter()
                 viewer.sync()
@@ -490,14 +572,23 @@ def run(args: argparse.Namespace):
                     metrics.add_time("loop", now - step_start)
                     metrics.maybe_print(now)
         stop_event.set()
-        control_thread.join(timeout=1.0)
-    except KeyboardInterrupt:
-        try:
-            stop_event.set()
+        if control_thread is not None:
             control_thread.join(timeout=1.0)
-        except UnboundLocalError:
-            pass
+    except KeyboardInterrupt:
         pass
+    finally:
+        stop_event.set()
+        if control_thread is not None:
+            control_thread.join(timeout=1.0)
+        if real_hand is not None:
+            try:
+                real_hand.disable()
+            except Exception:
+                pass
+            try:
+                real_hand.disconnect()
+            except Exception:
+                pass
 
 
 def main():
@@ -508,6 +599,30 @@ def main():
     parser.add_argument("--config", default="config_teleop.yaml", help="AnyDexRetarget YAML config path.")
     parser.add_argument("--model", default="mujoco/para_fr3.xml", help="MuJoCo XML model path.")
     parser.add_argument("--urdf", default=None, help="Override robot.urdf_path from the YAML config.")
+    parser.add_argument("--hand-config", default="config_hand.yaml", help="Real ParaHand motor YAML config path.")
+    parser.add_argument(
+        "--no-real-hand",
+        action="store_true",
+        help="Keep MuJoCo visualization only; do not connect or command the real ParaHand.",
+    )
+    parser.add_argument(
+        "--tendon-speed",
+        type=float,
+        default=100.0,
+        help="Broadcast speed percentage for pip_dip tendon motors after connecting the real hand; set <0 to skip.",
+    )
+    parser.add_argument(
+        "--default-motor-speed",
+        type=float,
+        default=50.0,
+        help="Broadcast speed percentage for non-tendon motors when --tendon-speed is enabled.",
+    )
+    parser.add_argument(
+        "--real-hand-rate",
+        type=float,
+        default=None,
+        help="Real ParaHand command rate in Hz; commands are read from the current MuJoCo state.",
+    )
     parser.add_argument(
         "--metrics-interval",
         type=float,
@@ -521,16 +636,29 @@ def main():
         help="Use segment_scaling from YAML instead of measuring it from Vision Pro at startup.",
     )
     parser.set_defaults(auto_segment_scaling=True)
+    parser.add_argument(
+        "--stable-min-wait",
+        type=float,
+        default=5.0,
+        help="Minimum seconds to stay in stable-hand detection before accepting the threshold.",
+    )
     parser.add_argument("--calibrate-duration", type=float, default=3.0, help="Seconds to average AVP hand samples.")
     parser.add_argument("--stable-duration", type=float, default=1.0, help="Required stable-hand window before averaging.")
     parser.add_argument(
         "--stable-threshold",
         type=float,
-        default=0.005,
+        default=0.06,
         help="Max wrist-relative keypoint std in meters for stable-hand detection.",
     )
     parser.add_argument("--stable-timeout", type=float, default=20.0, help="Max seconds to wait for a stable hand.")
-    run(parser.parse_args())
+    args = parser.parse_args()
+    if args.real_hand_rate is None:
+        args.real_hand_rate = args.rate
+    if args.real_hand_rate <= 0.0:
+        parser.error("--real-hand-rate must be > 0")
+    if args.tendon_speed is not None and args.tendon_speed < 0.0:
+        args.tendon_speed = None
+    run(args)
 
 
 if __name__ == "__main__":

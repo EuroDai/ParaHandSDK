@@ -143,7 +143,7 @@
                                         <body name="palm" pos="0 0 0.1" euler="0 0 0" childclass="hand">
                                         <site name="test" size="0.002" rgba="0 0 1 1" />
                                             <site name="inner_palm_5" pos="-0.00249 -0.021 0.1" size="0.002" rgba="0 0 1 1" />
-                                            <geom name="palm_collision_1" type="box" pos="-0.00249 0.00075 0.1" size="0.045 0.02175 0.04" class="palm_collision" contype="262144" conaffinity="2097343"/>
+                                            <geom name="palm_collision_1" type="box" pos="-0.00249 0.00075 0.1" size="0.045 0.02175 0.04" class="palm_collision" contype="262144" conaffinity="3145919"/>
                                             <body name="thumb_link_0" pos="0.01905 0 0.05851" euler="3.14 1.57 0">
                                                 <joint name="thumb_joint_0" type="hinge" axis="0 1 0" class="thumb_joint" range="0 0.785"/>
                                                 <geom type="box" pos="0 0 0.01" size="0.001 0.001 0.002" class="visual" />
@@ -155,10 +155,10 @@
                                                         <geom name="thumb_link_2_collision" type="box" pos="0.0225 0 0.00075" size="0.013795 0.00471 0.00485" class="collision" contype="524288" conaffinity="2343167"/>
                                                         <body name="thumb_link_3" pos="0.04970 0 0" euler="0 0 -3.14">
                                                             <joint name="thumb_joint_3" type="hinge" axis="0 0 1" class="thumb_joint"/>
-                                                            <geom name="thumb_link_3_collision" type="box" pos="-0.0227 0 0" size="0.014 0.005 0.006" class="collision" contype="1048576" conaffinity="2357503"/>
-                                                            <geom name="thumb_tip" pos="-0.0442 0.003 0" class="tip" contype="1048576" conaffinity="2357503"/>
+                                                            <geom name="thumb_link_3_collision" type="box" pos="-0.0227 0 0" size="0.014 0.005 0.006" class="collision" contype="1048576" conaffinity="2619647"/>
+                                                            <geom name="thumb_tip" pos="-0.0442 0.003 0" class="tip" contype="1048576" conaffinity="2619647"/>
                                                             <site name="thumb_tip" pos="-0.0502 -0.003 0" class="touch_sensor"/>
-                                                            <geom name="thumb_tac" pos="-0.0472 -0.003 0" class="tac" contype="1048576" conaffinity="2357503"/>
+                                                            <geom name="thumb_tac" pos="-0.0472 -0.003 0" class="tac" contype="1048576" conaffinity="2619647"/>
                                                         </body>
                                                     </body>
                                                 </body>
@@ -200,7 +200,7 @@
                                                         <joint name="middle_joint_1" axis="0 0 -1" class="passive_finger_joint"/>
                                                         <site name="middle_tendon_2" pos="-0.007 0.006 0.0" class="tendon"/>
                                                         <site name="middle_tendon_3" pos="-0.0205 0.006 0.0" class="tendon"/>
-                                                        <geom name="middle_link_2_collision" class="link_2_collision" pos="-0.01388 0 0" size="0.00591 0.0075 0.0065" contype="2048" conaffinity="3285181"/>
+                                                        <geom name="middle_link_2_collision" class="link_2_collision" pos="-0.01388 0 0" size="0.00591 0.0075 0.0065" contype="8192" conaffinity="3250365"/>
                                                         <body name="middle_link_3" pos="-0.0275 0 0" euler="-3.14 0 3.14">
                                                             <inertial pos="0 0 0" mass="0.005" fullinertia="1.93e-7 1.736e-6 1.707e-6 -1.9e-7 0 0"/>
                                                             <joint name="middle_joint_2" axis="0 0 1" class="passive_finger_joint" />

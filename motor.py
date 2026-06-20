@@ -7,6 +7,7 @@
 import time
 import math
 import serial
+import serial.tools.list_ports
 import threading
 import struct
 import datetime
@@ -85,7 +86,7 @@ class Motor:
     
     def __init__(
         self,
-        port: str = 'COM4',
+        port: str = 'auto',
         baudrate: int = 230400,
         timeout_s: float = 0.05,
         write_timeout_s: float = 0.05,
@@ -134,6 +135,38 @@ class Motor:
                 else:
                     crc = (crc << 1) & 0xFFFF
             self.crc16_table.append(crc)
+
+    def _resolve_serial_port(self) -> str:
+        """解析串口名，支持 auto 自动选择第一个可用串口。"""
+        port = str(self.port).strip()
+        if port.lower() != "auto":
+            return port
+
+        ports = list(serial.tools.list_ports.comports())
+        usb_ports = [
+            port_info
+            for port_info in ports
+            if not str(port_info.device).lower().startswith("/dev/ttys")
+        ]
+        if not usb_ports:
+            raise RuntimeError("未发现可用 USB 串口，请插入设备或手动设置 serial.port")
+
+        def priority(port_info) -> tuple[int, str]:
+            device = str(port_info.device)
+            lower_device = device.lower()
+            if lower_device.startswith("/dev/serial/by-id/"):
+                return (0, device)
+            if lower_device.startswith("/dev/ttyacm"):
+                return (1, device)
+            if lower_device.startswith("/dev/ttyusb"):
+                return (2, device)
+            if lower_device.startswith("com"):
+                return (3, device)
+            return (4, device)
+
+        selected = sorted(usb_ports, key=priority)[0].device
+        print(f"Auto-selected serial port: {selected}")
+        return selected
     
     def connect(self) -> bool:
         """
@@ -143,8 +176,9 @@ class Motor:
             bool: 连接是否成功
         """
         try:
+            resolved_port = self._resolve_serial_port()
             self.serial = serial.Serial(
-                port=self.port,
+                port=resolved_port,
                 baudrate=self.baudrate,
                 timeout=self.timeout_s,
                 write_timeout=self.write_timeout_s,

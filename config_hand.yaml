@@ -1,6 +1,6 @@
 ctrl_frequency: 50.0
 serial:
-  port: COM8
+  port: auto
   baudrate: 230400
   timeout_s: 0.05
   write_timeout_s: 0.05

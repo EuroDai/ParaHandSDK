@@ -796,7 +796,7 @@ class ParaHand:
         if not isinstance(serial_config, dict):
             raise ValueError("serial 配置必须是字典")
 
-        port = self._parse_port(serial_config.get("port", "COM4"))
+        port = self._parse_port(serial_config.get("port", "auto"))
         baudrate = self._parse_baudrate(serial_config.get("baudrate", config.get("baudrate", 230400)))
         timeout_s = self._parse_timeout(serial_config.get("timeout_s", 0.05), "timeout_s")
         write_timeout_s = self._parse_timeout(serial_config.get("write_timeout_s", 0.05), "write_timeout_s")
