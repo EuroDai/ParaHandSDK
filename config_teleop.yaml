@@ -5,7 +5,7 @@ optimizer:
 
 robot:
   type: parahand
-  urdf_path: urdf/parahand.urdf
+  urdf_path: urdf/parahand/parahand.urdf
   origin_link: retarget_origin
   tip_links:
     - thumb_tip
