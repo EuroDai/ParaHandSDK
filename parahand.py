@@ -12,13 +12,14 @@ from typing import Any, Dict, Iterable, Optional
 import motor
 
 
-CONFIG_KEYS = {"ctrl_frequency", "serial", "baudrate"}
+CONFIG_KEYS = {"ctrl_frequency", "serial", "baudrate", "tactile"}
 COUPLED_MCP1_JOINTS = (
     "index.mcp_1",
     "middle.mcp_1",
     "ring.mcp_1",
     "little.mcp_1",
 )
+FINGERTIP_FORCE_ORDER = ("thumb", "index", "middle", "ring", "little")
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config_hand.yaml")
 DEFAULT_FEEDBACK = {
     "position_deg": None,
@@ -39,6 +40,15 @@ class JointDefinition:
     max_deg: float
     reverse: bool
     enabled: bool
+
+
+@dataclass(frozen=True)
+class TactileDefinition:
+    enabled: bool
+    port: Optional[str]
+    baudrate: int
+    timeout_s: float
+    channel_fingers: tuple[str, ...]
 
 
 class ParaHand:
@@ -62,6 +72,10 @@ class ParaHand:
         self.joint_to_motor: Dict[str, JointDefinition] = {}
         self.motor_to_joint: Dict[int, str] = {}
         self._last_joint_targets_deg: Dict[str, float] = {}
+        self.tactile_config = self._extract_tactile_config(self.config)
+        self._tactile_lock = threading.Lock()
+        self._tactile_sensor: Optional[Any] = None
+        self._tactile_started = False
         self._rebuild_from_config(self.config)
 
     @property
@@ -69,20 +83,30 @@ class ParaHand:
         '''返回当前电机连接状态。'''
         return self.motor.connected
 
+    @property
+    def tactile_connected(self) -> bool:
+        '''返回触觉传感器后台读取线程是否已启动。'''
+        return self._tactile_started
+
     def connect(self) -> bool:
         '''连接电机并注册反馈回调。'''
         if self.motor.connected:
             self._register_callbacks()
+            if self.tactile_config.enabled:
+                self.start_tactile()
             return True
 
         connected = self.motor.connect()
         if connected:
             self._register_callbacks()
+            if self.tactile_config.enabled:
+                self.start_tactile()
         return connected
 
     def disconnect(self):
-        '''停止轮询并断开电机连接。'''
+        '''停止轮询并断开电机和触觉传感器连接。'''
         self.stop_polling()
+        self.stop_tactile()
         self._unregister_callbacks()
         self.motor.disconnect()
 
@@ -359,6 +383,69 @@ class ParaHand:
             for joint_name, feedback in self.get_joint_feedback().items()
         }
 
+    def start_tactile(
+        self,
+        port: Optional[Any] = None,
+        baudrate: Optional[Any] = None,
+        timeout_s: Optional[Any] = None,
+    ) -> bool:
+        '''启动 FSR402 五路触觉传感器后台读取。'''
+        if self._tactile_started:
+            return True
+
+        sensor_class = self._load_tactile_sensor_class()
+        tactile_port = self.tactile_config.port if port is None else self._parse_tactile_port(port)
+        tactile_baudrate = self.tactile_config.baudrate if baudrate is None else self._parse_baudrate(baudrate)
+        tactile_timeout_s = (
+            self.tactile_config.timeout_s
+            if timeout_s is None
+            else self._parse_timeout(timeout_s, "tactile.timeout_s")
+        )
+
+        sensor = sensor_class(
+            port=tactile_port,
+            baudrate=tactile_baudrate,
+            timeout=tactile_timeout_s,
+        )
+        sensor.start()
+        with self._tactile_lock:
+            self._tactile_sensor = sensor
+            self._tactile_started = True
+        return True
+
+    def stop_tactile(self):
+        '''停止 FSR402 五路触觉传感器后台读取。'''
+        with self._tactile_lock:
+            sensor = self._tactile_sensor
+            self._tactile_sensor = None
+            self._tactile_started = False
+
+        if sensor is not None:
+            sensor.stop()
+
+    def get_tactile_forces(self) -> list[float]:
+        '''返回五根手指指尖受力数组，顺序为 thumb/index/middle/ring/little，单位 g。'''
+        frame = self.get_tactile_frame()
+        if frame is None:
+            return [-1.0] * len(FINGERTIP_FORCE_ORDER)
+        return self._frame_to_fingertip_forces(frame)
+
+    def get_fingertip_forces(self) -> list[float]:
+        '''返回五根手指指尖受力数组，等同于 get_tactile_forces。'''
+        return self.get_tactile_forces()
+
+    def get_tactile_force_map(self) -> Dict[str, float]:
+        '''按手指名返回指尖受力，单位 g。'''
+        return dict(zip(FINGERTIP_FORCE_ORDER, self.get_tactile_forces()))
+
+    def get_tactile_frame(self) -> Optional[Any]:
+        '''返回 FSR402Sensor 的最新 SensorFrame；无数据或未启动时返回 None。'''
+        with self._tactile_lock:
+            sensor = self._tactile_sensor
+        if sensor is None:
+            return None
+        return sensor.read()
+
     def update_joint_definition(self, joint_name: str, config_values: Any):
         '''更新指定关节的映射与运动参数。'''
         if not isinstance(config_values, dict):
@@ -412,6 +499,31 @@ class ParaHand:
         serial_config["baudrate"] = self._parse_baudrate(baudrate)
         serial_config["timeout_s"] = self._parse_timeout(timeout_s, "timeout_s")
         serial_config["write_timeout_s"] = self._parse_timeout(write_timeout_s, "write_timeout_s")
+        self._rebuild_from_config(new_config)
+
+    def update_tactile_config(
+        self,
+        enabled: Any,
+        port: Any,
+        baudrate: Any,
+        timeout_s: Any,
+        channel_fingers: Optional[Any] = None,
+    ):
+        '''更新触觉传感器连接参数。'''
+        new_config = copy.deepcopy(self.config)
+        tactile_config = new_config.get("tactile")
+        if not isinstance(tactile_config, dict):
+            tactile_config = {}
+            new_config["tactile"] = tactile_config
+
+        tactile_config["enabled"] = self._parse_bool(enabled, "tactile", "enabled")
+        parsed_port = self._parse_tactile_port(port)
+        tactile_config["port"] = "auto" if parsed_port is None else parsed_port
+        tactile_config["baudrate"] = self._parse_baudrate(baudrate)
+        tactile_config["timeout_s"] = self._parse_timeout(timeout_s, "tactile.timeout_s")
+        if channel_fingers is not None:
+            tactile_config["channel_fingers"] = list(self._parse_tactile_channel_fingers(channel_fingers))
+
         self._rebuild_from_config(new_config)
 
     def save_config(self):
@@ -690,9 +802,11 @@ class ParaHand:
         joint_to_motor = self._build_joint_map(config)
         ctrl_frequency = self._parse_ctrl_frequency(config.get("ctrl_frequency", 50))
         port, baudrate, timeout_s, write_timeout_s = self._extract_connection_config(config)
+        tactile_config = self._extract_tactile_config(config)
 
         self.config = config
         self.ctrl_frequency = ctrl_frequency
+        self.tactile_config = tactile_config
         self.motor.port = port
         self.motor.baudrate = baudrate
         self.motor.timeout_s = timeout_s
@@ -830,5 +944,71 @@ class ParaHand:
             raise ValueError("ctrl_frequency 必须大于 0")
         return value
 
+    def _extract_tactile_config(self, config: Dict[str, Any]) -> TactileDefinition:
+        '''提取并校验触觉传感器配置。'''
+        tactile_config = config.get("tactile", {})
+        if tactile_config is None:
+            tactile_config = {}
+        if not isinstance(tactile_config, dict):
+            raise ValueError("tactile 配置必须是字典")
 
-__all__ = ["ParaHand", "JointDefinition"]
+        enabled = self._parse_bool(tactile_config.get("enabled", False), "tactile", "enabled")
+        port = self._parse_tactile_port(tactile_config.get("port", None))
+        baudrate = self._parse_baudrate(tactile_config.get("baudrate", 115200))
+        timeout_s = self._parse_timeout(tactile_config.get("timeout_s", 1.0), "tactile.timeout_s")
+        channel_fingers = self._parse_tactile_channel_fingers(
+            tactile_config.get("channel_fingers", FINGERTIP_FORCE_ORDER)
+        )
+        return TactileDefinition(
+            enabled=enabled,
+            port=port,
+            baudrate=baudrate,
+            timeout_s=timeout_s,
+            channel_fingers=channel_fingers,
+        )
+
+    def _parse_tactile_port(self, port: Any) -> Optional[str]:
+        '''解析触觉传感器串口名；None/auto 表示自动选择。'''
+        if port is None:
+            return None
+        value = str(port).strip()
+        if not value or value.lower() == "auto":
+            return None
+        return value
+
+    def _parse_tactile_channel_fingers(self, channel_fingers: Any) -> tuple[str, ...]:
+        '''解析 PA0~PA4 到五指的映射。'''
+        try:
+            fingers = tuple(str(value).strip() for value in channel_fingers)
+        except TypeError as exc:
+            raise TypeError("tactile.channel_fingers 必须是长度为 5 的数组") from exc
+
+        if len(fingers) != len(FINGERTIP_FORCE_ORDER):
+            raise ValueError("tactile.channel_fingers 长度必须为 5")
+        if set(fingers) != set(FINGERTIP_FORCE_ORDER):
+            raise ValueError(f"tactile.channel_fingers 必须包含 {list(FINGERTIP_FORCE_ORDER)}")
+        return fingers
+
+    def _frame_to_fingertip_forces(self, frame: Any) -> list[float]:
+        '''将 FSR402 通道顺序转换为固定五指顺序。'''
+        forces = getattr(frame, "forces", None)
+        if forces is None:
+            return [-1.0] * len(FINGERTIP_FORCE_ORDER)
+
+        force_values = [float(value) for value in forces]
+        fingertip_forces = {finger: -1.0 for finger in FINGERTIP_FORCE_ORDER}
+        for channel, finger in enumerate(self.tactile_config.channel_fingers):
+            if channel < len(force_values):
+                fingertip_forces[finger] = force_values[channel]
+        return [fingertip_forces[finger] for finger in FINGERTIP_FORCE_ORDER]
+
+    def _load_tactile_sensor_class(self):
+        '''延迟导入 FSR402Sensor，避免未安装 pyserial 时影响电机控制。'''
+        try:
+            from fsr402_sensor import FSR402Sensor
+        except ImportError as exc:
+            raise ImportError("使用触觉传感器需要先安装 pyserial，并确保 fsr402_sensor.py 可导入") from exc
+        return FSR402Sensor
+
+
+__all__ = ["ParaHand", "JointDefinition", "TactileDefinition"]

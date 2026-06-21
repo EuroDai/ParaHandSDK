@@ -4,6 +4,17 @@ serial:
   baudrate: 230400
   timeout_s: 0.05
   write_timeout_s: 0.05
+tactile:
+  enabled: false
+  port: COM7
+  baudrate: 115200
+  timeout_s: 1.0
+  channel_fingers:
+  - thumb
+  - index
+  - middle
+  - ring
+  - little
 thumb:
   cmc_1:
     id: 13

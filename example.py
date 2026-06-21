@@ -58,7 +58,10 @@ def main() -> int:
         print("\n示例 4：按关节读取当前位置（单位：度）")
         print(hand.get_joint_positions())
 
-        print("\n示例 5：单个关节调零接口（实际走 jog/零位流程请按硬件协议使用）")
+        print("\n示例 5：读取五指指尖受力（单位：g，顺序 thumb/index/middle/ring/little）")
+        print(hand.get_tactile_forces())
+
+        print("\n示例 6：单个关节调零接口（实际走 jog/零位流程请按硬件协议使用）")
         print("这里仅演示调用，不默认执行。")
         print("例如：hand.jog_joint('thumb.cmc_1', 1) / hand.jog_joint('thumb.cmc_1', 0)")
 

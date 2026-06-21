@@ -644,6 +644,15 @@ class MainWindow(QMainWindow):
     MOTOR_MODE = "motor"
     PARAHAND_MODE = "parahand"
     DEFAULT_PIP_DIP_GUI_RANGE_MM = (0.0, 25.0)
+    FINGERTIP_FORCE_ORDER = ("thumb", "index", "middle", "ring", "little")
+    FINGERTIP_FORCE_DISPLAY_NAMES = {
+        "thumb": "拇指",
+        "index": "食指",
+        "middle": "中指",
+        "ring": "无名指",
+        "little": "小指",
+    }
+    TACTILE_CONTACT_THRESHOLD_G = 50.0
 
     def __init__(self, config_path: Optional[str] = None):
         super().__init__()
@@ -691,8 +700,15 @@ class MainWindow(QMainWindow):
         self.timeout_spinbox = QDoubleSpinBox()
         self.write_timeout_spinbox = QDoubleSpinBox()
         self.gui_step_spinbox = QDoubleSpinBox()
+        self.tactile_enabled_checkbox = QCheckBox("启用触觉")
+        self.tactile_port_input = QLineEdit()
+        self.tactile_baudrate_spinbox = QSpinBox()
+        self.tactile_timeout_spinbox = QDoubleSpinBox()
         self.save_connection_config_button = QPushButton("保存控制器配置")
         self.connection_config_status_label = QLabel("已载入")
+        self.tactile_force_box = QGroupBox("Fingertip Contact Force")
+        self.tactile_force_labels: Dict[str, QLabel] = {}
+        self.tactile_force_status_label = QLabel("--")
 
         self.empty_label = QLabel("config_hand.yaml 中还没有有效的 joint 配置，请先填写 id / range / reverse。")
         self.scroll_area = QScrollArea()
@@ -708,6 +724,7 @@ class MainWindow(QMainWindow):
         self._set_connection_state(False)
         self._apply_control_mode_to_rows()
         self._set_status(f"就绪 | 配置: {self.hand.config_path}")
+        self._refresh_tactile_feedback()
         self._resize_to_minimum_start_width()
 
     def _build_ui(self):
@@ -766,6 +783,20 @@ class MainWindow(QMainWindow):
         self.gui_step_spinbox.setSuffix(" step")
         self.gui_step_spinbox.setFixedWidth(100)
 
+        self.tactile_port_input.setClearButtonEnabled(True)
+        self.tactile_port_input.setMinimumWidth(100)
+
+        self.tactile_baudrate_spinbox.setRange(1, 10_000_000)
+        self.tactile_baudrate_spinbox.setSingleStep(100)
+        self.tactile_baudrate_spinbox.setFixedWidth(110)
+
+        self.tactile_timeout_spinbox.setDecimals(3)
+        self.tactile_timeout_spinbox.setRange(0.0, 60.0)
+        self.tactile_timeout_spinbox.setSingleStep(0.01)
+        self.tactile_timeout_spinbox.setKeyboardTracking(False)
+        self.tactile_timeout_spinbox.setSuffix(" s")
+        self.tactile_timeout_spinbox.setFixedWidth(100)
+
         self.connection_config_toggle_button.setText("控制器配置")
         self.connection_config_toggle_button.setCheckable(True)
         self.connection_config_toggle_button.setArrowType(Qt.RightArrow)
@@ -795,6 +826,13 @@ class MainWindow(QMainWindow):
         connection_grid.addWidget(self.baudrate_spinbox, 2, 1)
         connection_grid.addWidget(QLabel("jog步长"), 2, 2)
         connection_grid.addWidget(self.gui_step_spinbox, 2, 3)
+        connection_grid.addWidget(self.tactile_enabled_checkbox, 3, 0, 1, 2)
+        connection_grid.addWidget(QLabel("tactile port"), 3, 2)
+        connection_grid.addWidget(self.tactile_port_input, 3, 3)
+        connection_grid.addWidget(QLabel("tactile baudrate"), 4, 0)
+        connection_grid.addWidget(self.tactile_baudrate_spinbox, 4, 1)
+        connection_grid.addWidget(QLabel("tactile timeout_s"), 4, 2)
+        connection_grid.addWidget(self.tactile_timeout_spinbox, 4, 3)
 
         footer_layout = QHBoxLayout()
         footer_layout.setContentsMargins(12, 0, 0, 0)
@@ -816,6 +854,29 @@ class MainWindow(QMainWindow):
         box_layout.addWidget(self.connection_config_container)
         self.connection_config_box.setLayout(box_layout)
 
+        tactile_force_grid = QGridLayout()
+        tactile_force_grid.setContentsMargins(0, 0, 0, 0)
+        tactile_force_grid.setHorizontalSpacing(14)
+        tactile_force_grid.setVerticalSpacing(4)
+        for column, finger_name in enumerate(self.FINGERTIP_FORCE_ORDER):
+            name_label = QLabel(self.FINGERTIP_FORCE_DISPLAY_NAMES[finger_name])
+            name_label.setAlignment(Qt.AlignCenter)
+            value_label = QLabel("-- g")
+            value_label.setAlignment(Qt.AlignCenter)
+            value_label.setMinimumWidth(72)
+            value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            self.tactile_force_labels[finger_name] = value_label
+            tactile_force_grid.addWidget(name_label, 0, column)
+            tactile_force_grid.addWidget(value_label, 1, column)
+
+        self.tactile_force_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        tactile_force_layout = QVBoxLayout()
+        tactile_force_layout.setContentsMargins(8, 8, 8, 8)
+        tactile_force_layout.setSpacing(6)
+        tactile_force_layout.addLayout(tactile_force_grid)
+        tactile_force_layout.addWidget(self.tactile_force_status_label)
+        self.tactile_force_box.setLayout(tactile_force_layout)
+
         self.rows_layout.setContentsMargins(0, 0, 0, 0)
         self.rows_layout.setSpacing(12)
         self.rows_container.setLayout(self.rows_layout)
@@ -829,6 +890,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.config_help_label)
         main_layout.addWidget(self.step_hint_label)
         main_layout.addWidget(self.connection_config_box)
+        main_layout.addWidget(self.tactile_force_box)
         main_layout.addWidget(self.scroll_area)
         self.setCentralWidget(central_widget)
 
@@ -864,6 +926,10 @@ class MainWindow(QMainWindow):
         self.baudrate_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.write_timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
+        self.tactile_enabled_checkbox.toggled.connect(self._mark_connection_config_dirty)
+        self.tactile_port_input.textChanged.connect(self._mark_connection_config_dirty)
+        self.tactile_baudrate_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
+        self.tactile_timeout_spinbox.valueChanged.connect(self._mark_connection_config_dirty)
         self.save_connection_config_button.clicked.connect(self._save_connection_config)
         self.gui_step_spinbox.valueChanged.connect(self._apply_gui_step_to_rows)
 
@@ -882,6 +948,10 @@ class MainWindow(QMainWindow):
         self.baudrate_spinbox.setValue(int(self.hand.motor.baudrate))
         self.timeout_spinbox.setValue(float(self.hand.motor.timeout_s))
         self.write_timeout_spinbox.setValue(float(self.hand.motor.write_timeout_s))
+        self.tactile_enabled_checkbox.setChecked(bool(self.hand.tactile_config.enabled))
+        self.tactile_port_input.setText(self.hand.tactile_config.port or "auto")
+        self.tactile_baudrate_spinbox.setValue(int(self.hand.tactile_config.baudrate))
+        self.tactile_timeout_spinbox.setValue(float(self.hand.tactile_config.timeout_s))
         self._syncing_connection_config = False
         self._connection_config_dirty = False
         self.connection_config_status_label.setText(status_text)
@@ -898,6 +968,10 @@ class MainWindow(QMainWindow):
         self.baudrate_spinbox.setEnabled(enabled)
         self.timeout_spinbox.setEnabled(enabled)
         self.write_timeout_spinbox.setEnabled(enabled)
+        self.tactile_enabled_checkbox.setEnabled(enabled)
+        self.tactile_port_input.setEnabled(enabled)
+        self.tactile_baudrate_spinbox.setEnabled(enabled)
+        self.tactile_timeout_spinbox.setEnabled(enabled)
         self.save_connection_config_button.setEnabled(enabled)
 
     def _save_connection_config(self):
@@ -913,8 +987,15 @@ class MainWindow(QMainWindow):
                 self.timeout_spinbox.value(),
                 self.write_timeout_spinbox.value(),
             )
+            self.hand.update_tactile_config(
+                self.tactile_enabled_checkbox.isChecked(),
+                self.tactile_port_input.text(),
+                self.tactile_baudrate_spinbox.value(),
+                self.tactile_timeout_spinbox.value(),
+            )
             self.hand.save_config()
             self._load_connection_config_fields("已保存")
+            self._refresh_tactile_feedback()
             self._set_status("控制器配置已保存")
         except Exception as exc:
             QMessageBox.critical(self, "保存控制器配置失败", str(exc))
@@ -1234,6 +1315,52 @@ class MainWindow(QMainWindow):
     def _set_status(self, message: str):
         self.status_label.setText(message)
 
+    def _set_tactile_force_values(self, forces: Optional[list[float]], status_text: str):
+        force_values = forces if forces is not None else [-1.0] * len(self.FINGERTIP_FORCE_ORDER)
+        for index, finger_name in enumerate(self.FINGERTIP_FORCE_ORDER):
+            label = self.tactile_force_labels.get(finger_name)
+            if label is None:
+                continue
+
+            try:
+                force_g = float(force_values[index])
+            except (IndexError, TypeError, ValueError):
+                force_g = -1.0
+
+            if force_g < 0:
+                label.setText("ERR")
+                label.setStyleSheet("color: #777;")
+            elif force_g > self.TACTILE_CONTACT_THRESHOLD_G:
+                label.setText(f"{force_g:.1f} g")
+                label.setStyleSheet("color: #0a7f35; font-weight: 600;")
+            else:
+                label.setText(f"{force_g:.1f} g")
+                label.setStyleSheet("")
+
+        self.tactile_force_status_label.setText(status_text)
+
+    def _refresh_tactile_feedback(self):
+        if not self.hand.tactile_config.enabled:
+            self._set_tactile_force_values(None, "触觉未启用")
+            return
+        if not self.hand.tactile_connected:
+            self._set_tactile_force_values(None, "触觉未连接")
+            return
+
+        try:
+            forces = self.hand.get_tactile_forces()
+        except Exception as exc:
+            self._set_tactile_force_values(None, f"触觉读取失败: {exc}")
+            return
+
+        valid_count = sum(1 for force_g in forces if force_g >= 0)
+        contact_count = sum(1 for force_g in forces if force_g > self.TACTILE_CONTACT_THRESHOLD_G)
+        if valid_count == 0:
+            status_text = "等待触觉数据"
+        else:
+            status_text = f"触觉读取中 | 接触 {contact_count}/5 | 有效 {valid_count}/5"
+        self._set_tactile_force_values(forces, status_text)
+
     def _connect_device(self):
         if self._connection_config_dirty:
             QMessageBox.information(self, "请先保存", "连接前请先保存控制器配置。")
@@ -1253,6 +1380,13 @@ class MainWindow(QMainWindow):
             self._set_connection_state(True)
             self._set_status("已连接")
         except Exception as exc:
+            self.feedback_timer.stop()
+            try:
+                self.hand.disconnect()
+            except Exception:
+                pass
+            self._set_connection_state(False)
+            self._refresh_tactile_feedback()
             self._set_status(f"连接失败: {exc}")
             QMessageBox.critical(self, "连接失败", str(exc))
 
@@ -1262,7 +1396,7 @@ class MainWindow(QMainWindow):
         self._active_step_adjust_joint = None
         self._active_step_adjust_direction = 0
         try:
-            if self.hand.connected:
+            if self.hand.connected or self.hand.tactile_connected:
                 self.hand.disconnect()
         except Exception as exc:
             QMessageBox.critical(self, "断开失败", str(exc))
@@ -1270,6 +1404,7 @@ class MainWindow(QMainWindow):
             self._feedback_initialized = False
             self._set_connection_state(False)
             self._apply_control_mode_to_rows()
+            self._refresh_tactile_feedback()
             self._set_status("已断开")
 
     def _toggle_enable(self, enabled: bool):
@@ -1452,6 +1587,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _refresh_feedback(self):
+        self._refresh_tactile_feedback()
         if not self.hand.connected or not self.row_widgets:
             return
         try:
