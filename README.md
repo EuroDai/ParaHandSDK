@@ -94,6 +94,118 @@ pio run --target upload    # 烧录 (ST-Link)
 pip install pyserial
 ```
 
+### ParaHand hand-position 接口
+
+`ParaHand` 提供两类控制/读取语义：
+
+- `set_joint_positions()` / `get_joint_feedback()`：关节/电机角度语义，输入和反馈单位为度，适合调试单个电机或做底层校准。
+- `set_hand_position_map()` / `get_hand_position_map()`：整手姿态语义，普通关节单位为弧度，`pip_dip` 表示 tendon length，单位为米。
+
+hand-position 语义覆盖 16 个关节：
+
+| 手指 | hand-position 字段 | 单位 |
+|---|---|---|
+| thumb | `thumb.cmc_1`, `thumb.cmc_2`, `thumb.mcp`, `thumb.ip` | rad |
+| index | `index.mcp_1`, `index.mcp_2` | rad |
+| index | `index.pip_dip` | tendon length, m |
+| middle | `middle.mcp_1`, `middle.mcp_2` | rad |
+| middle | `middle.pip_dip` | tendon length, m |
+| ring | `ring.mcp_1`, `ring.mcp_2` | rad |
+| ring | `ring.pip_dip` | tendon length, m |
+| little | `little.mcp_1`, `little.mcp_2` | rad |
+| little | `little.pip_dip` | tendon length, m |
+
+#### 按关节名控制
+
+```python
+import math
+from parahand import ParaHand
+
+hand = ParaHand("config_hand.yaml")
+hand.connect()
+hand.start_polling()
+hand.enable()
+
+positions = {name: 0.0 for name in hand.get_hand_joint_order()}
+
+# thumb 4 motors: all values are radians.
+positions["thumb.cmc_1"] = math.radians(10.0)
+positions["thumb.cmc_2"] = math.radians(-20.0)
+positions["thumb.mcp"] = math.radians(30.0)
+positions["thumb.ip"] = math.radians(25.0)
+
+# Other fingers: mcp_1/mcp_2 are radians, pip_dip is tendon length in meters.
+positions["index.mcp_1"] = math.radians(-3.0)
+positions["index.mcp_2"] = math.radians(35.0)
+positions["index.pip_dip"] = 0.012
+
+command_ids = hand.set_hand_position_map(positions)
+```
+
+`set_hand_position_map()` 会先将 hand-position 语义转换为关节角度，再走原有电机控制链路。普通关节执行 `rad -> deg`；`pip_dip` 会结合同一手指的 `mcp_2` 角度做 tendon 补偿。
+
+#### 按固定顺序控制
+
+`set_hand_positions()` 仍然可用，适合 teleop 等已经按数组输出的流程。顺序来自 `hand.get_hand_joint_order()`：
+
+```python
+positions = [0.0] * len(hand.get_hand_joint_order())
+positions[0] = math.radians(10.0)  # thumb.cmc_1
+positions[5] = math.radians(35.0)  # index.mcp_2
+positions[6] = 0.012               # index.pip_dip tendon length, m
+hand.set_hand_positions(positions)
+```
+
+当前默认配置顺序为：
+
+```text
+thumb.cmc_1, thumb.cmc_2, thumb.mcp, thumb.ip,
+index.mcp_1, index.mcp_2, index.pip_dip,
+middle.mcp_1, middle.mcp_2, middle.pip_dip,
+ring.mcp_1, ring.mcp_2, ring.pip_dip,
+little.mcp_1, little.mcp_2, little.pip_dip
+```
+
+#### 读取 hand-position 反馈
+
+```python
+hand_feedback = hand.get_hand_position_map()
+
+# thumb values are radians.
+thumb_ip_rad = hand_feedback["thumb.ip"]
+
+# pip_dip values are compensated tendon length in meters.
+index_tendon_m = hand_feedback["index.pip_dip"]
+```
+
+读取时 `ParaHand` 先从电机反馈得到角度，再将普通关节转换为弧度；对 `pip_dip`，会使用同一手指的 `mcp_2` 反馈角度扣除补偿角，再反算 tendon length。也就是说，如果补偿机制让 `pip_dip` 电机多转了 10 度，反算 tendon length 时会先减去这 10 度。
+
+也可以读取固定顺序数组：
+
+```python
+positions = hand.get_hand_positions()
+```
+
+无反馈或关节未启用时，对应值为 `None`。可用 `hand.get_hand_position_units()` 查询每个字段的单位。
+
+#### 补偿换算接口
+
+需要单独调试 tendon 补偿时，可以直接使用：
+
+```python
+angle_deg = hand.pip_dip_tendon_length_to_angle_deg(
+    mcp_2_angle_rad=math.radians(35.0),
+    tendon_length_m=0.012,
+)
+
+tendon_m = hand.pip_dip_angle_to_tendon_length_m(
+    mcp_2_angle_rad=math.radians(35.0),
+    pip_dip_angle_deg=angle_deg,
+)
+```
+
+`pip_dip_tendon_length_to_angle_deg()` 是控制方向，`pip_dip_angle_to_tendon_length_m()` 是读取方向，两者使用同一套补偿模型。
+
 ### 快速开始
 
 ```python

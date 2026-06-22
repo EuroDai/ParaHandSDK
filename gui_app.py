@@ -687,7 +687,7 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("未连接")
         self.config_label = QLabel(f"配置: {self.hand.config_path}")
         self.config_help_label = QLabel(
-            "顶部可切换电机模式与 ParaHand 模式；ParaHand 模式下普通关节显示角度，pip_dip 显示毫米并统一走 set_hand_positions。"
+            "顶部可切换电机模式与 ParaHand 模式；ParaHand 模式下普通关节显示角度，pip_dip 显示毫米并走 hand-position 接口。"
         )
         self.step_hint_label = QLabel("说明：ParaHand 模式下，pip_dip 关节的点动步长固定为 gui_step 的 0.5 倍。")
         self.connection_config_toggle_button = QToolButton()
@@ -1015,7 +1015,7 @@ class MainWindow(QMainWindow):
         pip_dip_m = self._hand_target_positions.get(joint_name)
         if mcp_2_rad is None or pip_dip_m is None:
             return None
-        return self.hand._conpensated_pip_dip(float(mcp_2_rad), float(pip_dip_m))
+        return self.hand.pip_dip_tendon_length_to_angle_deg(float(mcp_2_rad), float(pip_dip_m))
 
     def _refresh_hand_joint_order(self):
         previous_motor_targets = getattr(self, "_motor_target_values_deg", {})
@@ -1073,59 +1073,11 @@ class MainWindow(QMainWindow):
             return float(position_value) * 1000.0
         return math.degrees(float(position_value))
 
-    def _inverse_compensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_deg: float) -> float:
-        return (
-            ((float(pip_dip_deg) + 255.0) * 5.0 * math.pi / 180.0)
-            + math.sqrt(587.75 - 378.98 * math.cos(2 - float(mcp_2_angle_rad)))
-            - 27.23
-        ) / 1000.0
-
     def _joint_target_map_to_hand_positions(self, targets_deg: Dict[str, Any]) -> Dict[str, float]:
-        positions: Dict[str, float] = {}
-        for joint_name in self.hand_joint_order:
-            if joint_name not in targets_deg:
-                raise KeyError(f"缺少关节 {joint_name} 的角度输入")
-            joint_value_deg = float(targets_deg[joint_name])
-            if self.hand.is_pip_dip_joint(joint_name):
-                finger_name, _ = self.hand._split_joint_name(joint_name)
-                mcp_2_name = f"{finger_name}.mcp_2"
-                if mcp_2_name not in targets_deg:
-                    raise KeyError(f"未找到 {joint_name} 对应的 {mcp_2_name} 角度输入")
-                positions[joint_name] = self._inverse_compensated_pip_dip(
-                    math.radians(float(targets_deg[mcp_2_name])),
-                    joint_value_deg,
-                )
-            else:
-                positions[joint_name] = math.radians(joint_value_deg)
-        return positions
+        return self.hand.joint_targets_deg_to_hand_position_map(targets_deg)
 
     def _get_hand_positions_feedback(self, joint_feedback: Dict[str, Dict[str, Any]]) -> Dict[str, Optional[float]]:
-        positions: Dict[str, Optional[float]] = {}
-        for joint_name in self.hand_joint_order:
-            definition = self.hand.joint_to_motor[joint_name]
-            if not definition.enabled:
-                positions[joint_name] = None
-                continue
-
-            joint_position_deg = joint_feedback.get(joint_name, {}).get("position_deg")
-            if joint_position_deg is None:
-                positions[joint_name] = None
-                continue
-
-            if self.hand.is_pip_dip_joint(joint_name):
-                finger_name, _ = self.hand._split_joint_name(joint_name)
-                mcp_2_name = f"{finger_name}.mcp_2"
-                mcp_2_deg = joint_feedback.get(mcp_2_name, {}).get("position_deg")
-                if mcp_2_deg is None:
-                    positions[joint_name] = None
-                    continue
-                positions[joint_name] = self._inverse_compensated_pip_dip(
-                    math.radians(float(mcp_2_deg)),
-                    float(joint_position_deg),
-                )
-            else:
-                positions[joint_name] = math.radians(float(joint_position_deg))
-        return positions
+        return self.hand.joint_feedback_to_hand_position_map(joint_feedback)
 
     def _sync_hand_targets_from_motor_targets(self):
         if not self.hand_joint_order:
@@ -1522,8 +1474,7 @@ class MainWindow(QMainWindow):
             requested_targets_deg = self.hand.hand_position_map_to_joint_targets_deg(self._hand_target_positions)
             resolved_targets = self.hand.resolve_joint_targets(requested_targets_deg)
             self._apply_resolved_joint_targets_to_gui(resolved_targets)
-            full_positions = [self._hand_target_positions[name] for name in self.hand_joint_order]
-            self.hand.set_hand_positions(full_positions)
+            self.hand.set_hand_position_map(self._hand_target_positions)
             unit_suffix = " mm" if self.hand.is_pip_dip_joint(joint_name) else " °"
             self._set_status(f"已发送 {joint_name} -> {self._display_target_for_joint(joint_name):.2f}{unit_suffix}")
         except Exception as exc:

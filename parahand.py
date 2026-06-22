@@ -138,6 +138,13 @@ class ParaHand:
         '''判断指定关节是否为 pip_dip。'''
         return joint_name.endswith(".pip_dip")
 
+    def get_hand_position_units(self) -> Dict[str, str]:
+        '''返回整手位置接口中各关节的单位：普通关节为 rad，pip_dip 为 m。'''
+        return {
+            joint_name: "m" if self.is_pip_dip_joint(joint_name) else "rad"
+            for joint_name in self.get_hand_joint_order()
+        }
+
     def set_joint_positions(self, targets_deg: Dict[str, float], speed: Optional[Any] = None) -> Dict[str, str]:
         '''按关节名批量设置目标角度。'''
         return self._dispatch_joint_positions(self.resolve_joint_targets(targets_deg), speed)
@@ -189,6 +196,83 @@ class ParaHand:
                 raise KeyError(f"缺少关节 {joint_name} 的位置输入")
             raw_targets[joint_name] = float(positions[joint_name])
         return self._raw_hand_positions_to_joint_targets_deg(raw_targets)
+
+    def set_hand_position_map(self, positions: Dict[str, float], speed: Optional[Any] = None) -> Dict[str, str]:
+        '''按关节名控制整手位置：普通关节 rad，pip_dip 为 tendon length(m)。'''
+        return self.set_joint_positions(
+            self.hand_position_map_to_joint_targets_deg(positions),
+            speed,
+        )
+
+    def set_hand_position_map_broadcast(self, positions: Dict[str, float]) -> str:
+        '''按关节名广播控制整手位置：普通关节 rad，pip_dip 为 tendon length(m)。'''
+        return self.set_joint_positions_broadcast(
+            self.hand_position_map_to_joint_targets_deg(positions)
+        )
+
+    def joint_targets_deg_to_hand_position_map(self, targets_deg: Dict[str, Any]) -> Dict[str, float]:
+        '''将整手关节角度目标转换回整手位置语义值：普通关节 rad，pip_dip m。'''
+        if not isinstance(targets_deg, dict):
+            raise TypeError("targets_deg 必须是按关节名组织的 dict")
+
+        positions: Dict[str, float] = {}
+        for joint_name in self.get_hand_joint_order():
+            if joint_name not in targets_deg:
+                raise KeyError(f"缺少关节 {joint_name} 的角度输入")
+            joint_value_deg = float(targets_deg[joint_name])
+            if self.is_pip_dip_joint(joint_name):
+                finger_name, _ = self._split_joint_name(joint_name)
+                mcp_2_name = f"{finger_name}.mcp_2"
+                if mcp_2_name not in targets_deg:
+                    raise KeyError(f"未找到 {joint_name} 对应的 {mcp_2_name} 角度输入")
+                positions[joint_name] = self.pip_dip_angle_to_tendon_length_m(
+                    math.radians(float(targets_deg[mcp_2_name])),
+                    joint_value_deg,
+                )
+            else:
+                positions[joint_name] = math.radians(joint_value_deg)
+        return positions
+
+    def joint_feedback_to_hand_position_map(
+        self,
+        joint_feedback: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Optional[float]]:
+        '''将 get_joint_feedback 的角度反馈转换为整手位置语义值。'''
+        positions: Dict[str, Optional[float]] = {}
+        for joint_name in self.get_hand_joint_order():
+            definition = self._get_joint_definition(joint_name)
+            if not definition.enabled:
+                positions[joint_name] = None
+                continue
+
+            joint_position_deg = joint_feedback.get(joint_name, {}).get("position_deg")
+            if joint_position_deg is None:
+                positions[joint_name] = None
+                continue
+
+            if self.is_pip_dip_joint(joint_name):
+                finger_name, _ = self._split_joint_name(joint_name)
+                mcp_2_name = f"{finger_name}.mcp_2"
+                mcp_2_deg = joint_feedback.get(mcp_2_name, {}).get("position_deg")
+                if mcp_2_deg is None:
+                    positions[joint_name] = None
+                    continue
+                positions[joint_name] = self.pip_dip_angle_to_tendon_length_m(
+                    math.radians(float(mcp_2_deg)),
+                    float(joint_position_deg),
+                )
+            else:
+                positions[joint_name] = math.radians(float(joint_position_deg))
+        return positions
+
+    def get_hand_position_map(self) -> Dict[str, Optional[float]]:
+        '''按关节名返回整手位置反馈：普通关节 rad，pip_dip 为补偿后的 tendon length(m)。'''
+        return self.joint_feedback_to_hand_position_map(self.get_joint_feedback())
+
+    def get_hand_positions(self) -> list[Optional[float]]:
+        '''按固定顺序返回整手位置反馈，顺序同 get_hand_joint_order。'''
+        position_map = self.get_hand_position_map()
+        return [position_map[joint_name] for joint_name in self.get_hand_joint_order()]
 
     def set_hand_positions(self, positions: Iterable[float], speed: Optional[Any] = None) -> Dict[str, str]:
         '''按固定顺序用输入数组控制整手关节：列表 0~15 依次对应 thumb.cmc_1(rad)、thumb.cmc_2(rad)、thumb.mcp(rad)、thumb.ip(rad)、index.mcp_1(rad)、index.mcp_2(rad)、index.pip_dip(m)、middle.mcp_1(rad)、middle.mcp_2(rad)、middle.pip_dip(m)、ring.mcp_1(rad)、ring.mcp_2(rad)、ring.pip_dip(m)、little.mcp_1(rad)、little.mcp_2(rad)、little.pip_dip(m)。'''
@@ -263,7 +347,10 @@ class ParaHand:
                 mcp_2_name = f"{finger_name}.mcp_2"
                 if mcp_2_name not in raw_targets:
                     raise KeyError(f"未找到 {joint_name} 对应的 {mcp_2_name} 输入")
-                targets_deg[joint_name] = self._conpensated_pip_dip(raw_targets[mcp_2_name], raw_value)
+                targets_deg[joint_name] = self.pip_dip_tendon_length_to_angle_deg(
+                    raw_targets[mcp_2_name],
+                    raw_value,
+                )
             else:
                 targets_deg[joint_name] = math.degrees(raw_value)
         return targets_deg
@@ -315,9 +402,40 @@ class ParaHand:
             return float(lower)
         return max(float(lower), min(float(upper), float(value)))
 
+    def pip_dip_compensation_angle_deg(self, mcp_2_angle_rad: float) -> float:
+        '''返回 mcp_2 补偿带来的 pip_dip 角度偏移，单位 deg。'''
+        compensation_length_mm = (
+            math.sqrt(587.75 - 378.98 * math.cos(2 - float(mcp_2_angle_rad)))
+            - 27.23
+        )
+        return -math.degrees(compensation_length_mm / 5.0)
+
+    def pip_dip_tendon_length_to_angle_deg(self, mcp_2_angle_rad: float, tendon_length_m: float) -> float:
+        '''将 tendon length(m) 转换为补偿后的 pip_dip 关节角度(deg)。'''
+        uncompensated_angle_deg = self._tendon_length_to_uncompensated_pip_dip_angle_deg(tendon_length_m)
+        return uncompensated_angle_deg + self.pip_dip_compensation_angle_deg(mcp_2_angle_rad)
+
+    def pip_dip_angle_to_tendon_length_m(self, mcp_2_angle_rad: float, pip_dip_angle_deg: float) -> float:
+        '''从补偿后的 pip_dip 关节角度(deg)反算 tendon length(m)。'''
+        uncompensated_angle_deg = (
+            float(pip_dip_angle_deg)
+            - self.pip_dip_compensation_angle_deg(mcp_2_angle_rad)
+        )
+        return self._uncompensated_pip_dip_angle_to_tendon_length_m(uncompensated_angle_deg)
+
+    def _tendon_length_to_uncompensated_pip_dip_angle_deg(self, tendon_length_m: float) -> float:
+        return math.degrees((1000.0 * float(tendon_length_m)) / 5.0) - 255.0
+
+    def _uncompensated_pip_dip_angle_to_tendon_length_m(self, pip_dip_angle_deg: float) -> float:
+        return math.radians(float(pip_dip_angle_deg) + 255.0) * 5.0 / 1000.0
+
     def _conpensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_m: float) -> float:
         '''根据同一手指的 mcp_2 弧度值和 pip_dip 米制输入计算 pip_dip 目标角度。'''
-        return 180* (1000 * pip_dip_m - math.sqrt(587.75 - 378.98 * math.cos(2 - mcp_2_angle_rad)) + 27.23) / (5 * math.pi) - 255
+        return self.pip_dip_tendon_length_to_angle_deg(mcp_2_angle_rad, pip_dip_m)
+
+    def _compensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_m: float) -> float:
+        '''_conpensated_pip_dip 的正确拼写兼容别名。'''
+        return self.pip_dip_tendon_length_to_angle_deg(mcp_2_angle_rad, pip_dip_m)
 
     def set_motor_target(self, motor_id: int, angle_deg: float, speed: Optional[float] = None) -> str:
         '''设置单个电机的目标角度和速度。'''
