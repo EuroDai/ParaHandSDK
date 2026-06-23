@@ -89,19 +89,18 @@ class ParaHand:
         return self._tactile_started
 
     def connect(self) -> bool:
-        '''连接电机并注册反馈回调。'''
+        '''连接电机并注册反馈回调；触觉传感器独立启动不受电机连接影响。'''
         if self.motor.connected:
             self._register_callbacks()
-            if self.tactile_config.enabled:
-                self.start_tactile()
-            return True
+        else:
+            motor_ok = self.motor.connect()
+            if motor_ok:
+                self._register_callbacks()
 
-        connected = self.motor.connect()
-        if connected:
-            self._register_callbacks()
-            if self.tactile_config.enabled:
-                self.start_tactile()
-        return connected
+        if self.tactile_config.enabled:
+            self.start_tactile()
+
+        return self.motor.connected
 
     def disconnect(self):
         '''停止轮询并断开电机和触觉传感器连接。'''
@@ -424,10 +423,15 @@ class ParaHand:
         return self._uncompensated_pip_dip_angle_to_tendon_length_m(uncompensated_angle_deg)
 
     def _tendon_length_to_uncompensated_pip_dip_angle_deg(self, tendon_length_m: float) -> float:
-        return math.degrees((1000.0 * float(tendon_length_m)) / 5.0) - 255.0
+        tendon_length_sim = tendon_length_m
+        tendon_length_real = (tendon_length_sim - 0.0285) * (0.02233 / (0.0037 - 0.0285))
+        pip_dip_angle_deg = math.degrees((1000.0 * float(tendon_length_real)) / 5.0) - 255.0
+        return pip_dip_angle_deg
 
     def _uncompensated_pip_dip_angle_to_tendon_length_m(self, pip_dip_angle_deg: float) -> float:
-        return math.radians(float(pip_dip_angle_deg) + 255.0) * 5.0 / 1000.0
+        tendon_length_real = math.radians(float(pip_dip_angle_deg) + 255.0) * 5.0 / 1000.0
+        tendon_length_sim = 0.0285 + tendon_length_real * (0.0037 - 0.0285) / 0.02233
+        return tendon_length_sim
 
     def _conpensated_pip_dip(self, mcp_2_angle_rad: float, pip_dip_m: float) -> float:
         '''根据同一手指的 mcp_2 弧度值和 pip_dip 米制输入计算 pip_dip 目标角度。'''
@@ -507,25 +511,29 @@ class ParaHand:
         baudrate: Optional[Any] = None,
         timeout_s: Optional[Any] = None,
     ) -> bool:
-        '''启动 FSR402 五路触觉传感器后台读取。'''
+        '''启动 FSR402 五路触觉传感器后台读取。失败时返回 False 而不抛异常。'''
         if self._tactile_started:
             return True
 
-        sensor_class = self._load_tactile_sensor_class()
-        tactile_port = self.tactile_config.port if port is None else self._parse_tactile_port(port)
-        tactile_baudrate = self.tactile_config.baudrate if baudrate is None else self._parse_baudrate(baudrate)
-        tactile_timeout_s = (
-            self.tactile_config.timeout_s
-            if timeout_s is None
-            else self._parse_timeout(timeout_s, "tactile.timeout_s")
-        )
+        try:
+            sensor_class = self._load_tactile_sensor_class()
+            tactile_port = self.tactile_config.port if port is None else self._parse_tactile_port(port)
+            tactile_baudrate = self.tactile_config.baudrate if baudrate is None else self._parse_baudrate(baudrate)
+            tactile_timeout_s = (
+                self.tactile_config.timeout_s
+                if timeout_s is None
+                else self._parse_timeout(timeout_s, "tactile.timeout_s")
+            )
 
-        sensor = sensor_class(
-            port=tactile_port,
-            baudrate=tactile_baudrate,
-            timeout=tactile_timeout_s,
-        )
-        sensor.start()
+            sensor = sensor_class(
+                port=tactile_port,
+                baudrate=tactile_baudrate,
+                timeout=tactile_timeout_s,
+            )
+            sensor.start()
+        except Exception:
+            return False
+
         with self._tactile_lock:
             self._tactile_sensor = sensor
             self._tactile_started = True

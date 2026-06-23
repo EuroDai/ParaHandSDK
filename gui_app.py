@@ -643,7 +643,7 @@ class JointRowWidget(QGroupBox):
 class MainWindow(QMainWindow):
     MOTOR_MODE = "motor"
     PARAHAND_MODE = "parahand"
-    DEFAULT_PIP_DIP_GUI_RANGE_MM = (0.0, 25.0)
+    DEFAULT_PIP_DIP_GUI_RANGE_MM = (3.7, 28.5)
     FINGERTIP_FORCE_ORDER = ("thumb", "index", "middle", "ring", "little")
     FINGERTIP_FORCE_DISPLAY_NAMES = {
         "thumb": "拇指",
@@ -1321,16 +1321,34 @@ class MainWindow(QMainWindow):
 
         self._feedback_initialized = False
         try:
-            if not self.hand.connect():
-                self._set_status("连接失败")
-                QMessageBox.warning(self, "连接失败", "未能连接到电机控制系统。")
-                return
-            if self.row_widgets:
-                self.hand.start_polling()
+            motor_ok = self.hand.connect()
+            tactile_ok = self.hand.tactile_connected
+            if tactile_ok:
+                self._refresh_tactile_feedback()
+
+            if motor_ok:
+                if self.row_widgets:
+                    self.hand.start_polling()
+                    self.feedback_timer.start()
+                    self._refresh_feedback()
+                self._set_connection_state(True)
+                parts = ["已连接"]
+                if self.hand.tactile_config.enabled and not tactile_ok:
+                    parts.append("触觉传感器未连接")
+                self._set_status("，".join(parts))
+            elif tactile_ok:
                 self.feedback_timer.start()
-                self._refresh_feedback()
-            self._set_connection_state(True)
-            self._set_status("已连接")
+                self.connect_button.setEnabled(False)
+                self.disconnect_button.setEnabled(True)
+                self._set_connection_config_editable(False)
+                self._set_status("电机未连接，触觉传感器已连接")
+            else:
+                extra = ""
+                if self.hand.tactile_config.enabled:
+                    extra = "，触觉传感器也未连接"
+                self._set_status(f"连接失败{extra}")
+                QMessageBox.warning(self, "连接失败", f"未能连接到电机控制系统{extra}。")
+                return
         except Exception as exc:
             self.feedback_timer.stop()
             try:
@@ -1347,9 +1365,9 @@ class MainWindow(QMainWindow):
         self.step_repeat_timer.stop()
         self._active_step_adjust_joint = None
         self._active_step_adjust_direction = 0
+        was_connected = self.hand.connected or self.hand.tactile_connected
         try:
-            if self.hand.connected or self.hand.tactile_connected:
-                self.hand.disconnect()
+            self.hand.disconnect()
         except Exception as exc:
             QMessageBox.critical(self, "断开失败", str(exc))
         finally:
@@ -1357,7 +1375,8 @@ class MainWindow(QMainWindow):
             self._set_connection_state(False)
             self._apply_control_mode_to_rows()
             self._refresh_tactile_feedback()
-            self._set_status("已断开")
+            if was_connected:
+                self._set_status("已断开")
 
     def _toggle_enable(self, enabled: bool):
         if not self.hand.connected:
