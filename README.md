@@ -360,3 +360,26 @@ python -m unittest discover -s tests -v
 | example.py | 控制及模式选择示例 |
 | gui_app.py | 带模式选择的 GUI |
 | tests/ | 无硬件单元测试 |
+
+
+## 原始串口记录（GUI / deploy 对比）
+
+在启动 GUI 或部署进程前设置 `PARAHAND_TRACE_DIR` 为日志目录，
+可用 `PARAHAND_TRACE_LABEL=gui` 或 `deploy-reset` 区分实验。
+每次连接自动生成独立 JSONL，断开连接时结束；不额外打开串口或发送命令。
+未设置环境变量时不创建记录器。
+
+记录包含原始收发字节、实际写入返回值、CRC 校验、状态解析、查询结果与
+反馈存储时间。时间戳为同一主机的 monotonic 时间，metadata 另含墙钟时间。
+写入串口成功不等于电机收到或执行；坏包中的电机 ID 也不可信。
+记录采用有限队列和异步写盘，单次上限 512 MiB；丢记录或写盘失败会标记为
+不完整。没有 trace_end 的日志不能据此证明“没有回包”。
+
+在 SDK 目录离线汇总：
+
+```sh
+uv run python serial_trace.py /path/gui.jsonl /path/deploy.jsonl --motor 3
+```
+
+完整比较需同时查看 query_result、tx_written、rx_chunk、rx_frame、status
+及 feedback_store；尤其注意运动前后回复间隔和查询超时窗口。

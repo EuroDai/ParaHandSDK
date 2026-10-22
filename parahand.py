@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import re
 import threading
@@ -30,6 +31,7 @@ FINGERTIP_FORCE_ORDER = ("thumb", "index", "middle", "ring", "little")
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("config_hand.yaml")
 DEFAULT_FEEDBACK = {
     "position_deg": None,
+    "position_updated_at_monotonic_s": None,
     "speed_pct": None,
     "current_mA": None,
     "online": None,
@@ -133,6 +135,9 @@ class ParaHand:
         self._poll_next_allowed_at: Dict[int, float] = {}
         self._poll_bus_pause_until: float = 0.0
         self._poll_cursor = 0
+        self._poll_error_count = 0
+        self._last_poll_error = None
+        self._last_poll_warning_at = float("-inf")
         self._callbacks_registered = False
         self.ctrl_frequency = self._parse_ctrl_frequency(self.config.get("ctrl_frequency", 50))
         self.joint_to_motor: Dict[str, JointDefinition] = {}
@@ -202,6 +207,10 @@ class ParaHand:
         self.stop_tactile()
         self._unregister_callbacks()
         self.motor.disconnect()
+
+    def wait_for_commands(self, timeout_s: float = 1.0) -> None:
+        '''等待电机串口发送队列排空。'''
+        self.motor.wait_for_commands(timeout_s)
 
     def enable(self, joints: Optional[Iterable[str]] = None) -> str:
         '''使能指定关节或全部已启用关节。'''
@@ -947,9 +956,23 @@ class ParaHand:
         self._poll_cursor = (start_index + 1) % len(ordered_motor_ids)
 
         updated_feedback: Dict[int, Dict[str, Any]] = {}
-        period = 1.0 / self.ctrl_frequency
-        backoff_base = max(0.5, period * 10.0)
-        backoff_cap = 5.0
+        timeout_s = max(self.motor.timeout_s, 1.0 / self.ctrl_frequency)
+
+        batch_reader = getattr(self.motor, "get_motor_statuses_sync", None)
+        eligible_motor_ids = [
+            motor_id
+            for motor_id in motor_ids
+            if now >= self._poll_next_allowed_at.get(motor_id, 0.0)
+        ]
+        if callable(batch_reader) and eligible_motor_ids:
+            statuses = batch_reader(eligible_motor_ids, timeout=timeout_s)
+            for motor_id in eligible_motor_ids:
+                feedback_update, _ = self._store_motor_status(
+                    motor_id,
+                    statuses[motor_id],
+                )
+                updated_feedback[motor_id] = feedback_update
+            return copy.deepcopy(updated_feedback)
 
         for motor_id in motor_ids:
             now = time.monotonic()
@@ -957,36 +980,95 @@ class ParaHand:
             if now < next_allowed:
                 continue
 
-            status = self.motor.get_motor_status(motor_id, sync=True, timeout=period)
-            feedback_update = {
-                "position_deg": status.get("angle"),
-                "online": status.get("online"),
-                "fsm_state": status.get("fsm_state"),
-                "error_code": status.get("error_code"),
-                "temp": status.get("temp"),
-                "bus_voltage": status.get("bus_voltage"),
-            }
-            # A timeout may return the last cached angle. Never replace a valid
-            # position with a synthetic zero merely because one poll was lost.
-            if status.get("timeout") and not status.get("cached", False):
-                feedback_update.pop("position_deg", None)
+            feedback_update, timed_out = self._poll_motor_status(
+                motor_id,
+                timeout_s=timeout_s,
+            )
             updated_feedback[motor_id] = feedback_update
-
-            if status.get("timeout"):
-                failure_count = self._poll_failure_counts.get(motor_id, 0) + 1
-                self._poll_failure_counts[motor_id] = failure_count
-                cooldown = min(backoff_base * (2 ** (failure_count - 1)), backoff_cap)
-                self._poll_next_allowed_at[motor_id] = time.monotonic() + cooldown
-                self._poll_bus_pause_until = time.monotonic() + min(max(cooldown * 0.5, 0.1), 0.5)
+            if timed_out:
                 break
-            else:
-                self._poll_failure_counts.pop(motor_id, None)
-                self._poll_next_allowed_at.pop(motor_id, None)
+        return copy.deepcopy(updated_feedback)
 
+    def poll_next(self) -> Dict[int, Dict[str, Any]]:
+        '''轮询一个启用电机，为后台状态读取提供固定总线预算。'''
+        if not self.motor.connected:
+            raise RuntimeError("未连接到电机控制系统")
+        now = time.monotonic()
+        if now < self._poll_bus_pause_until:
+            return {}
+        motor_ids = list(self._poll_motor_ids())
+        if not motor_ids:
+            return {}
+        for offset in range(len(motor_ids)):
+            index = (self._poll_cursor + offset) % len(motor_ids)
+            motor_id = motor_ids[index]
+            if now < self._poll_next_allowed_at.get(motor_id, 0.0):
+                continue
+            self._poll_cursor = (index + 1) % len(motor_ids)
+            timeout_s = max(
+                self.motor.timeout_s,
+                1.0 / self.ctrl_frequency,
+            )
+            feedback, _ = self._poll_motor_status(
+                motor_id,
+                timeout_s=timeout_s,
+            )
+            return {motor_id: copy.deepcopy(feedback)}
+        return {}
+
+    def _poll_motor_status(
+        self,
+        motor_id: int,
+        *,
+        timeout_s: float,
+    ) -> tuple[Dict[str, Any], bool]:
+        status = self.motor.get_motor_status(
+            motor_id,
+            sync=True,
+            timeout=timeout_s,
+        )
+        return self._store_motor_status(motor_id, status)
+
+    def _store_motor_status(
+        self,
+        motor_id: int,
+        status: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], bool]:
+        timed_out = bool(status.get("timeout"))
+        feedback_update = {
+            "position_deg": status.get("angle"),
+            "online": status.get("online"),
+            "fsm_state": status.get("fsm_state"),
+            "error_code": status.get("error_code"),
+            "temp": status.get("temp"),
+            "bus_voltage": status.get("bus_voltage"),
+        }
+        if timed_out and not status.get("cached", False):
+            feedback_update.pop("position_deg", None)
+        if not timed_out and feedback_update.get("position_deg") is not None:
+            feedback_update["position_updated_at_monotonic_s"] = (
+                status.get("received_at_monotonic_s", time.monotonic())
+            )
+        period = 1.0 / self.ctrl_frequency
+        if timed_out:
+            failure_count = self._poll_failure_counts.get(motor_id, 0) + 1
+            self._poll_failure_counts[motor_id] = failure_count
+            # Back off only this device; keep retries below the deployment
+            # freshness budget, without pausing healthy motors on the bus.
+            cooldown = min(
+                max(0.05, period) * (2 ** min(failure_count - 1, 3)),
+                0.25,
+            )
+            self._poll_next_allowed_at[motor_id] = time.monotonic() + cooldown
+        else:
+            self._poll_failure_counts.pop(motor_id, None)
+            self._poll_next_allowed_at.pop(motor_id, None)
         with self._feedback_lock:
-            for motor_id, values in updated_feedback.items():
-                self._get_feedback_entry(motor_id).update(values)
-            return copy.deepcopy(updated_feedback)
+            self._get_feedback_entry(motor_id).update(feedback_update)
+        trace = getattr(self.motor, "_trace_event", None)
+        if trace is not None:
+            trace("feedback_store", motor_id=motor_id, **feedback_update)
+        return feedback_update, timed_out
 
     def start_polling(self):
         '''启动后台线程持续轮询状态。'''
@@ -1008,14 +1090,26 @@ class ParaHand:
 
     def _poll_loop(self):
         '''按控制频率循环执行状态轮询。'''
-        period = 1.0 / self.ctrl_frequency
+        # Deployment consumes hand feedback at 20 Hz. A 40 Hz full-hand poll
+        # leaves one fresh snapshot per half policy period without saturating
+        # the shared serial bus used by outgoing angle broadcasts.
+        period = 1.0 / min(self.ctrl_frequency, 40.0)
         while not self._poll_stop_event.is_set():
-            started_at = time.time()
+            started_at = time.monotonic()
             try:
                 self.poll_once()
-            except Exception:
-                pass
-            elapsed = time.time() - started_at
+            except Exception as exc:
+                self._poll_error_count += 1
+                self._last_poll_error = f"{type(exc).__name__}: {exc}"
+                now = time.monotonic()
+                if now - self._last_poll_warning_at >= 1.0:
+                    self._last_poll_warning_at = now
+                    logging.getLogger(__name__).warning(
+                        "Hand status polling failed (%d errors): %s",
+                        self._poll_error_count,
+                        self._last_poll_error,
+                    )
+            elapsed = time.monotonic() - started_at
             pause_until = self._poll_bus_pause_until
             extra_wait = max(0.0, pause_until - time.monotonic()) if pause_until > 0.0 else 0.0
             self._poll_stop_event.wait(max(0.0, period - elapsed, extra_wait))
@@ -1043,11 +1137,14 @@ class ParaHand:
     def _handle_angle_broadcast(self, response: Any):
         '''处理角度广播并更新缓存。'''
         angles = getattr(response, "data", {}).get("angles", {})
+        updated_at = time.monotonic()
         with self._feedback_lock:
             for motor_id, angle_deg in angles.items():
                 joint_name = self.motor_to_joint.get(motor_id)
                 if joint_name and self.joint_to_motor[joint_name].enabled:
-                    self._get_feedback_entry(motor_id)["position_deg"] = angle_deg
+                    feedback = self._get_feedback_entry(motor_id)
+                    feedback["position_deg"] = angle_deg
+                    feedback["position_updated_at_monotonic_s"] = updated_at
 
     def _handle_speed_broadcast(self, response: Any):
         '''处理速度广播并更新缓存。'''

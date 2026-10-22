@@ -1,6 +1,6 @@
 ctrl_frequency: 50.0
 serial:
-  port: COM8
+  port: COM7
   baudrate: 500000
   timeout_s: 0.05
   write_timeout_s: 0.05
@@ -19,7 +19,7 @@ tactile:
     - ring
     - little
   hwk:
-    port: COM7
+    port: COM5
     baudrate: 921600
     response_timeout_s: 0.2
     write_timeout_s: 0.2
@@ -44,13 +44,13 @@ thumb:
     id: 14
     range:
     - -90.0
-    - 30.0
+    - 45.0
     reverse: false
     enabled: true
   mcp:
     id: 15
     range:
-    - 0.0
+    - -30.0
     - 90.0
     reverse: false
     enabled: true
@@ -65,7 +65,7 @@ index:
   mcp_1:
     id: 5
     range:
-    - -8.0
+    - -30.0
     - 0.0
     reverse: false
     enabled: true
@@ -82,8 +82,8 @@ index:
     - -255.0
     - 255.0
     gui_range_mm:
-    - 3.7
-    - 28.5
+    - 0.0
+    - 25.0
     reverse: false
     enabled: true
 middle:
@@ -107,8 +107,8 @@ middle:
     - -255.0
     - 255.0
     gui_range_mm:
-    - 3.7
-    - 28.5
+    - 0.0
+    - 25.0
     reverse: false
     enabled: true
 ring:
@@ -132,16 +132,16 @@ ring:
     - -255.0
     - 255.0
     gui_range_mm:
-    - 3.7
-    - 28.5
+    - 0.0
+    - 25.0
     reverse: true
     enabled: true
 little:
   mcp_1:
     id: 8
     range:
-    - 0
-    - 45
+    - 0.0
+    - 30.0
     reverse: false
     enabled: true
   mcp_2:
@@ -157,7 +157,7 @@ little:
     - -255.0
     - 255.0
     gui_range_mm:
-    - 3.7
-    - 28.5
+    - 0.0
+    - 25.0
     reverse: false
     enabled: true
